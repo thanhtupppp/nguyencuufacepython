@@ -1,0 +1,50 @@
+# NguyenCuuFacePython - Default Configuration
+
+pipeline:
+  detection:
+    model: "scrfd_500m" # Options: scrfd_500m, scrfd_2.5g, scrfd_10g, yunet, retinaface
+    conf_threshold: 0.5
+    nms_threshold: 0.4
+    input_size: [640, 640]
+
+  quality:
+    min_face_size: 60      # Minimum bbox width/height in pixels
+    optimal_face_size: 112
+    blur_threshold: 50.0   # Laplacian variance threshold
+    max_yaw: 30.0          # Degrees
+    max_pitch: 30.0        # Degrees
+    max_roll: 20.0         # Degrees
+    min_brightness: 40.0   # Mean pixel intensity
+    max_brightness: 220.0
+
+  anti_spoofing:
+    enabled: true
+    model: "minifasnet"
+    threshold: 0.85
+
+  alignment:
+    output_size: [112, 112]
+
+  recognition:
+    model: "arcface_r50"   # Options: arcface_r50, arcface_r100, adaface_ir50, magface_r50, mobilefacenet
+    model_version: "arcface_v1"
+    embedding_dim: 512
+
+  database:
+    type: "postgres"
+    host: "localhost"
+    port: 5432
+    database: "face_recognition"
+    user: "postgres"
+    password: ""
+    table_persons: "persons"
+    table_embeddings: "face_embeddings"
+
+  decision:
+    similarity_metric: "cosine"
+    threshold: 0.60
+    margin: 0.08           # Minimum gap between top-1 and top-2 candidate
+    temporal_voting:
+      enabled: true
+      window_size: 5       # Number of consecutive frames
+      consensus_ratio: 0.6 # At least 3 out of 5 frames agree
