@@ -1,54 +1,145 @@
-# Quy Trình & Tiêu Chuẩn Đánh Giá So Sánh (Benchmark Protocol)
+# Quy Trình & Tiêu Chuẩn Benchmark Recognition Nội Bộ (P0)
 
-> **Mục tiêu**: So sánh thực tế giữa **ArcFace** và **AdaFace** (và sau đó là MagFace, MobileFaceNet) để chọn ra backbone recognition tối ưu nhất cho bài toán nhận diện thực tế, đặc biệt là trong điều kiện khó (ánh sáng yếu, mờ, góc nghiêng).
-
----
-
-## 1. Các Ứng Viên So Sánh
-
-1. **ArcFace (Baseline)**:
-   - Backbone: ResNet-50 / ResNet-100 (InsightFace pre-trained on Glint360k / MS1MV2).
-   - Đặc điểm: Margin loss góc độ cố định $m = 0.5$, $s = 64$. Tiêu chuẩn vàng trong công nghiệp nhận diện.
-2. **AdaFace (Adaptive Margin Face Recognition)**:
-   - Backbone: IR-50 / IR-101.
-   - Đặc điểm: Margin thích ứng dựa theo độ lớn gradient và chất lượng ảnh (ảnh kém chất lượng nhận margin thấp hơn để tránh overfitting). Rất mạnh trong ảnh mờ và ảnh camera giám sát.
-3. **MagFace (Magnitude Face)**:
-   - Backbone: ResNet-50.
-   - Đặc điểm: Độ lớn (magnitude) của vector tỷ lệ thuận với chất lượng khuôn mặt, kết hợp cosine margin.
+> **Mục tiêu**: Xây dựng bộ benchmark nhận diện khuôn mặt nội bộ để kiểm chứng thực tế và định lượng chính xác hiệu năng của pipeline baseline (**SCRFD + 5-point alignment + ArcFace**) trước khi tiến hành xây dựng database hay API.
+> 
+> **Nguyên tắc**: Thà từ chối nhận diện còn hơn nhận nhầm người. Không chọn threshold tùy ý (`if score > 0.5`), mọi ngưỡng và margin phải được xác định từ phân bố điểm số thực tế.
 
 ---
 
-## 2. Tiêu Chí & Chỉ Số Đánh Giá (Metrics)
+## 1. Pipeline Baseline (P0)
 
-| Chỉ số | Định nghĩa | Mục tiêu |
-| :--- | :--- | :--- |
-| **FAR (False Accept Rate)** | Tỷ lệ hai người khác nhau bị nhận diện nhầm là cùng một người | Càng thấp càng tốt (Mục tiêu: $< 0.01\%$ tại ngưỡng chuẩn) |
-| **FRR (False Reject Rate)** | Tỷ lệ cùng một người nhưng bị hệ thống từ chối nhận diện | Càng thấp càng tốt ($< 1\%$) |
-| **EER (Equal Error Rate)** | Điểm cân bằng nơi $FAR = FRR$ | Càng thấp càng tốt |
-| **Similarity Margin** | Khoảng cách trung bình giữa điểm số Top 1 và Top 2 trên tập kiểm thử | Càng lớn càng an toàn (chống nhận nhầm) |
-| **Inference Latency** | Thời gian trích xuất embedding 1 khuôn mặt (ms) | $< 15$ ms trên GPU, $< 60$ ms trên CPU |
-| **Memory Footprint** | Dung lượng RAM/VRAM khi load model ONNX | $< 500$ MB VRAM |
+```text
+camera / image
+    │
+    ▼
+  SCRFD (Face Detection & 5 Landmarks)
+    │
+    ▼
+5-Point Alignment (Similarity Transform 112x112)
+    │
+    ▼
+ArcFace Baseline (Backbone ResNet-50 / buffalo_l)
+    │
+    ▼
+L2-Normalized Embedding (512D)
+    │
+    ▼
+Cosine Similarity Search
+    │
+    ▼
+Dual-Threshold Decision Engine
+(Score >= Threshold VÀ Margin >= Top1 - Top2)
+    │
+    ▼
+Same / Different Person (Match / Unknown / Ambiguous)
+```
 
 ---
 
-## 3. Các Điều Kiện Kiểm Thử Suy Giảm Thực Tế (Degradation Scenarios)
+## 2. Cấu Trúc Thư Mục Bộ Benchmark (`benchmarks/`)
 
-1. **Khuôn mặt chuẩn (Standard)**: Ảnh chụp thẳng, rõ nét, đủ sáng, kích thước lớn hơn 150x150 px.
-2. **Mờ do chuyển động & Out-of-focus (Blurry)**: Áp dụng bộ lọc Gaussian Blur / Motion Blur ($\sigma \in [2, 5]$).
-3. **Thiếu sáng & Ngược sáng (Low-light & Backlit)**: Giảm gamma ($\gamma = 0.3 \div 0.6$) hoặc tạo vùng tương phản tối.
-4. **Góc nghiêng lớn (Extreme Pose)**: Góc nghiêng Yaw từ $25^\circ$ đến $45^\circ$, Pitch từ $20^\circ$ đến $35^\circ$.
-5. **Khuôn mặt kích thước nhỏ (Low Resolution)**: Downscale xuống $30\times 30$ rồi upscale lại $112\times 112$.
-6. **Che một phần khuôn mặt (Partial Occlusion)**: Che khẩu trang hoặc kính râm.
+```text
+benchmarks/
+├── gallery/                     # Ảnh chuẩn làm mốc nhận diện của từng người
+│   ├── person_001/              # 1-3 ảnh chân dung chuẩn, rõ nét
+│   ├── person_002/
+│   └── ...
+│
+├── probe/                       # Ảnh kiểm thử theo các kịch bản suy giảm chất lượng
+│   ├── frontal/                 # Ảnh chụp thẳng, điều kiện chuẩn
+│   ├── angle/                   # Góc quay mặt (Yaw/Pitch/Roll: 15° - 45°)
+│   ├── low_light/               # Thiếu sáng, ngược sáng, tương phản kém
+│   ├── blur/                    # Mờ do chuyển động hoặc out-of-focus
+│   ├── partial_occlusion/       # Che khẩu trang, kính râm, tay che
+│   └── distance/                # Khoảng cách xa, khuôn mặt nhỏ (< 50x50 px)
+│
+├── pairs/                       # Danh sách cặp kiểm thử định danh
+│   ├── genuine.csv              # Cặp ảnh của CÙNG một người (Positive pairs)
+│   └── impostor.csv             # Cặp ảnh của HAI NGƯỜI KHÁC NHAU (Negative pairs)
+│
+├── scripts/                     # Mã nguồn chạy đánh giá
+│   ├── generate_pairs.py        # Tự động sinh file pairs từ gallery và probe
+│   ├── metrics.py               # Thư viện tính toán FAR, FRR, EER, ROC, Margin
+│   └── run_benchmark.py         # Runner trích xuất vector, tính toán và xuất báo cáo
+│
+└── results/                     # Kết quả đo lường thực tế
+    ├── similarity_distribution.csv # Bảng phân bố similarity genuine vs impostor
+    ├── roc.csv                  # Dữ liệu đường cong ROC (FPR vs TPR)
+    └── threshold_report.md      # Báo cáo tổng kết và đề xuất ngưỡng vận hành
+```
 
 ---
 
-## 4. Kế Hoạch Triển Khai Script Benchmark
+## 3. Phương Pháp Kiểm Chứng & Chỉ Số Đo Lường
 
-1. Chuẩn bị file script `benchmarks/benchmark_recognizers.py`:
-   - Tải weights ONNX chuẩn của ArcFace R50 và AdaFace IR50.
-   - Chạy inference trên tập ảnh cặp (Pairs test: Positive pairs và Negative pairs).
-   - Xuất biểu đồ phân phối Cosine Similarity:
-     - Biểu đồ đường cong phân phối cùng người (Positive).
-     - Biểu đồ đường cong phân phối khác người (Negative).
-     - Đường ROC (Receiver Operating Characteristic) curve và AUC.
-2. Tổng hợp bảng xếp hạng và chọn model làm mặc định cho Phase 2.
+### 3.1. Phân Bố Độ Tương Đồng (Similarity Distribution)
+
+So sánh trực tiếp hai tập phân bố cosine similarity:
+- **Genuine Distribution**: Tập hợp điểm tương đồng giữa các ảnh của **cùng một người**.
+- **Impostor Distribution**: Tập hợp điểm tương đồng giữa các ảnh của **hai người khác nhau**.
+
+```text
+      Impostor Density                Genuine Density
+          ┌───────┐                      ┌───────┐
+          │       │                      │       │
+          │       │                      │       │
+          │       │                      │       │
+      ────┴───────┴──────────────┬───────┴───────┴────► Cosine Similarity
+                                 │
+                         Optimal Threshold
+```
+
+### 3.2. Các Chỉ Số Cốt Lõi (Core Metrics)
+
+1. **FAR (False Accept Rate - Tỷ lệ nhận nhầm)**:
+   $$FAR(T) = \frac{\text{Số cặp Impostor có } similarity \ge T}{\text{Tổng số cặp Impostor}}$$
+   *Mục tiêu*: FAR $\le 0.01\%$ (hoặc $\le 0.001\%$ cho bảo mật cao).
+
+2. **FRR (False Reject Rate - Tỷ lệ từ chối sai người thật)**:
+   $$FRR(T) = \frac{\text{Số cặp Genuine có } similarity < T}{\text{Tổng số cặp Genuine}}$$
+   *Mục tiêu*: Càng thấp càng tốt ($< 1\%$).
+
+3. **TAR @ FAR (True Accept Rate tại mức FAR cố định)**:
+   $$TAR = 1 - FRR$$
+   Đo TAR tại các mốc chuẩn: $TAR @ FAR = 10^{-2}$, $TAR @ FAR = 10^{-3}$, $TAR @ FAR = 10^{-4}$.
+
+4. **EER (Equal Error Rate)**:
+   Điểm giao cắt mà tại đó $FAR(T) = FRR(T)$. EER càng nhỏ thì khả năng phân biệt của model càng cao.
+
+5. **Top-1 Accuracy & Top-2 Margin Check**:
+   Khi truy vấn gallery, ứng viên tốt nhất (Top 1) có điểm $S_1$ và ứng viên thứ hai (Top 2) có điểm $S_2$:
+   - **Quy tắc quyết định 2 lớp (Dual-Threshold Rule)**:
+     ```python
+     is_matched = (S1 >= threshold) and ((S1 - S2) >= margin)
+     ```
+   - Nếu $S_1 \ge threshold$ nhưng $(S_1 - S_2) < margin$: Đưa vào diện `AMBIGUOUS_MATCH` (nghi ngờ nhận nhầm do hai người có nét tương đồng).
+
+---
+
+## 4. Tiêu Chí Hoàn Thành Nghiên Cứu Baseline (P0 Sign-off Table)
+
+P0 chỉ được nghiệm thu khi bảng kết quả thực tế sau đây được lấp đầy bằng số liệu kiểm chứng:
+
+| Điều kiện Kiểm Thử | Số lượng mẫu | Top-1 Accuracy (%) | Mean Similarity (Genuine) | Mean Similarity (Impostor) |
+| :--- | :---: | :---: | :---: | :---: |
+| **Frontal (Chuẩn)** | *Đo thực tế* | *Đo thực tế* | *Đo thực tế* | *Đo thực tế* |
+| **Góc mặt (Angle)** | *Đo thực tế* | *Đo thực tế* | *Đo thực tế* | *Đo thực tế* |
+| **Thiếu sáng (Low-light)** | *Đo thực tế* | *Đo thực tế* | *Đo thực tế* | *Đo thực tế* |
+| **Mờ (Blur)** | *Đo thực tế* | *Đo thực tế* | *Đo thực tế* | *Đo thực tế* |
+| **Che khuất (Occlusion)** | *Đo thực tế* | *Đo thực tế* | *Đo thực tế* | *Đo thực tế* |
+| **Khoảng cách xa (Distance)** | *Đo thực tế* | *Đo thực tế* | *Đo thực tế* | *Đo thực tế* |
+
+### Thông Số Quyết Định Tối Ưu Được Xác Lập:
+- **FAR @ Threshold**: *Xác định qua phân bố*
+- **FRR @ Threshold**: *Xác định qua phân bố*
+- **EER**: *Xác định qua ROC*
+- **Ngưỡng nhận diện tối ưu ($T_{optimal}$)**: *Ví dụ: 0.62*
+- **Khoảng cách tối thiểu ($Margin_{optimal}$)**: *Ví dụ: 0.08*
+
+---
+
+## 5. Lưu Ý Về InsightFace & Licensing (2026)
+
+- Bản cập nhật InsightFace 1.0 và InsightFace Server (2026) giới thiệu các cải tiến pipeline và tối ưu tốc độ.
+- Các model pretrained sẵn như `buffalo_l` (chứa SCRFD + ArcFace R50) có giấy phép phi thương mại (Non-Commercial / Research License).
+- Trong kiến trúc hệ thống, code bọc ONNX Runtime được xây dựng độc lập để có thể nạp weights mã nguồn mở hoặc weights tự train mà không phụ thuộc trực tiếp vào package độc quyền của InsightFace.
