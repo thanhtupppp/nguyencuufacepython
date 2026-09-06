@@ -15,18 +15,13 @@ import sys
 MODELS_CONFIG = {
     "arcface_r50": {
         "filename": "w600k_r50.onnx",
-        "url": "https://huggingface.co/public-data/insightface/resolve/main/models/buffalo_l/w600k_r50.onnx",
-        "description": "ArcFace ResNet-50 trained on WebFace600K (512D output)",
+        "url": "https://huggingface.co/Aitrepreneur/insightface/resolve/main/models/buffalo_l/w600k_r50.onnx",
+        "description": "ArcFace ResNet-50 trained on WebFace600K (512D output, ~174MB)",
     },
     "scrfd_10g": {
-        "filename": "scrfd_10g_bnkps.onnx",
-        "url": "https://huggingface.co/public-data/insightface/resolve/main/models/buffalo_l/det_10g.onnx",
-        "description": "SCRFD 10G detector with 5 facial landmarks",
-    },
-    "scrfd_500m": {
-        "filename": "scrfd_500m_bnkps.onnx",
-        "url": "https://huggingface.co/public-data/insightface/resolve/main/models/buffalo_sc/det_500m.onnx",
-        "description": "Lightweight SCRFD 500M detector for CPU/Edge devices",
+        "filename": "det_10g.onnx",
+        "url": "https://huggingface.co/Aitrepreneur/insightface/resolve/main/models/buffalo_l/det_10g.onnx",
+        "description": "SCRFD 10G detector with 5 facial landmarks (~16.9MB)",
     },
 }
 

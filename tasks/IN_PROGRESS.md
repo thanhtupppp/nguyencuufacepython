@@ -2,10 +2,13 @@
 
 Nhiệm vụ đang thực hiện:
 
-## 🎯 P0.1: Xây Dựng Bộ Benchmark Recognition Nội Bộ & Đánh Giá ArcFace Baseline
-- [x] Cập nhật tài liệu chiến lược `docs/00_MASTER_PLAN.md` và tiêu chuẩn `docs/03_BENCHMARK.md` theo định hướng mới.
-- [ ] Thiết lập cây thư mục bộ benchmark: `benchmarks/gallery/`, `benchmarks/probe/`, `benchmarks/pairs/`, `benchmarks/results/`.
-- [ ] Xây dựng `requirements.txt` và thiết lập môi trường Python.
-- [ ] Xây dựng module căn chỉnh khuôn mặt 5 landmarks `src/alignment/aligner.py` (Umeyama Affine Transform chuẩn 112x112).
-- [ ] Xây dựng interface `BaseFaceRecognizer` và ArcFace ONNX wrapper `src/recognition/arcface.py` (512D L2-normalized).
-- [ ] Xây dựng bộ công cụ benchmark: `generate_pairs.py`, `metrics.py`, `run_benchmark.py`.
+## 🚀 P1.2: FastAPI Recognition Backend
+- [x] Hoàn thành 100% Phase P0 (Pipeline cốt lõi, Quality Gate, Tracking/Voting, Anti-Spoofing).
+- [x] Hoàn thành P1.1 (Docker Compose PostgreSQL 16 pgvector, DDL SQL, DatabaseClient, 25/25 tests PASSED).
+- [ ] Xây dựng app FastAPI (`src/api/main.py` và `src/api/routes/`).
+- [ ] Endpoints `/api/v1/persons` (CRUD danh tính).
+- [ ] Endpoint `/api/v1/faces/enroll` (Multi-part upload ảnh, trích xuất embedding 512D, lưu DB).
+- [ ] Endpoint `/api/v1/faces/recognize` (Nhận diện 1:N với Dual-Threshold Score + Margin).
+- [ ] Endpoint `/api/v1/faces/verify` (Xác thực 1:1).
+- [ ] WebSocket `/ws/v1/events` stream kết quả realtime.
+- [ ] Viết unit tests API (`tests/test_api.py`).
