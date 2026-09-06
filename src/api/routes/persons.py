@@ -3,10 +3,9 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from src.database.client import DatabaseClient
+from src.api.dependencies import db
 
 router = APIRouter()
-_db = DatabaseClient()
 
 
 class PersonCreate(BaseModel):
@@ -19,7 +18,7 @@ class PersonCreate(BaseModel):
 
 @router.post("", status_code=201)
 def create_person(payload: PersonCreate) -> dict:
-    return _db.create_person(
+    return db.create_person(
         person_id=payload.person_id,
         name=payload.name,
         department=payload.department,
@@ -30,12 +29,12 @@ def create_person(payload: PersonCreate) -> dict:
 
 @router.get("")
 def list_persons() -> list[dict]:
-    return _db.list_persons()
+    return db.list_persons()
 
 
 @router.get("/{person_id}")
 def get_person(person_id: str) -> dict:
-    person = _db.get_person(person_id)
+    person = db.get_person(person_id)
     if person is None:
         raise HTTPException(status_code=404, detail="person_id not found")
     return person
@@ -43,5 +42,5 @@ def get_person(person_id: str) -> dict:
 
 @router.delete("/{person_id}", status_code=204)
 def delete_person(person_id: str) -> None:
-    if not _db.delete_person(person_id):
+    if not db.delete_person(person_id):
         raise HTTPException(status_code=404, detail="person_id not found")
