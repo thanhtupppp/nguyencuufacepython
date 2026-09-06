@@ -8,8 +8,8 @@ Nhiệm vụ đang thực hiện:
 - [x] HTTP contracts `/api/v1/faces/enroll`, `/recognize`, `/verify`.
 - [x] API unit/contract tests scaffold (`tests/test_api.py`).
 - [x] Shared database dependency; API fail-closed nếu model recognition thật chưa được cấu hình.
-- [ ] Wire real production pipeline: SCRFD → 5-point alignment → ArcFace ONNX → quality/liveness → embedding.
-- [ ] Replace model hook with configured model registry and model fingerprint/version validation.
+- [x] Model registry contract: model_version → ONNX asset + SHA-256 fingerprint + 512D contract.
+- [ ] Wire model registry into production pipeline: SCRFD → 5-point alignment → ArcFace ONNX → quality/liveness → embedding.
 - [ ] WebSocket `/ws/v1/events` stream kết quả realtime.
 - [ ] Chạy integration tests với PostgreSQL + pgvector và real model asset.
 
