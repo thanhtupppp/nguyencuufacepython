@@ -53,8 +53,9 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 ### P1.3 Multi-device — PARTIAL
 - [x] WebSocket event transport.
 - [x] MQTT v1 topic/payload contract + validation tests.
-- [ ] MQTT broker adapter/client implementation.
-- [ ] MQTT command/state integration tests.
+- [x] Paho MQTT adapter: TLS, LWT availability, QoS/retained policy, reconnect backoff, idempotent request_id handling.
+- [x] MQTT adapter unit tests.
+- [ ] MQTT broker integration test.
 - [ ] HTTP/WebSocket adapter tests.
 - [ ] Multi-camera device/session model.
 
@@ -74,4 +75,4 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 
 ## Current execution order
 
-P0.1 real-model benchmark (blocked on assets/data) -> P1.3 MQTT broker adapter/transport tests -> P0.2 quality calibration -> P0.3 tracking benchmark -> P0.4 liveness calibration -> P1 integration tests -> multi-camera/device transport -> edge benchmarks -> model A/B.
+P0.1 real-model benchmark (blocked on assets/data) -> P0.2 quality calibration -> P0.3 tracking benchmark -> P0.4 liveness calibration -> P1 integration tests -> P1.3 MQTT broker integration + HTTP/WebSocket adapter tests -> multi-camera/device transport -> edge benchmarks -> model A/B.
