@@ -4,15 +4,17 @@ person identity management, embedding storage, and access logging.
 Includes transparent in-memory fallback for testing and development environments.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import logging
+from pathlib import Path
+import sqlite3
 from typing import Any, Optional, Union
 import numpy as np
 
 try:
-    import psycopg
-    from pgvector.psycopg import register_vector
+    import psycopg  # type: ignore
+    from pgvector.psycopg import register_vector  # type: ignore
 except ImportError:
     psycopg = None
     register_vector = None
@@ -34,11 +36,7 @@ class RecognitionDecision:
     similarity: float = 0.0
     second_similarity: float = 0.0
     margin: float = 0.0
-    top_candidates: list[SearchCandidate] = None
-
-    def __post_init__(self):
-        if self.top_candidates is None:
-            self.top_candidates = []
+    top_candidates: list[SearchCandidate] = field(default_factory=list)
 
 
 class DatabaseClient:
@@ -56,19 +54,96 @@ class DatabaseClient:
         password: str = "face_secure_password_2026",
         fallback_to_memory: bool = True,
         force_memory: bool = False,
+        sqlite_path: Optional[Union[str, Path]] = None,
     ):
+        self.sqlite_path = Path(sqlite_path) if sqlite_path else None
         self.conn_info = f"host={host} port={port} dbname={dbname} user={user} password={password}"
         self.fallback_to_memory = fallback_to_memory
         self.use_memory = force_memory
-        self._conn = None
+        self.use_sqlite = self.sqlite_path is not None
+        self._conn: Any = None
+        self._sqlite_conn: Optional[sqlite3.Connection] = None
 
-        # In-memory storage for fallback/testing
+        # In-memory storage / cache for fast vector search
         self._mem_persons: dict[str, dict[str, Any]] = {}
         self._mem_embeddings: list[dict[str, Any]] = []
         self._mem_logs: list[dict[str, Any]] = []
 
-        if not self.use_memory:
+        if self.use_sqlite:
+            self._init_sqlite()
+        elif not self.use_memory:
             self._connect()
+
+    def _init_sqlite(self) -> None:
+        """Initializes local SQLite database and preloads existing records into memory cache."""
+        assert self.sqlite_path is not None
+        self.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+        self._sqlite_conn = sqlite3.connect(str(self.sqlite_path), check_same_thread=False)
+        self._sqlite_conn.execute("PRAGMA foreign_keys = ON;")
+
+        # Create tables
+        self._sqlite_conn.executescript("""
+        CREATE TABLE IF NOT EXISTS persons (
+            person_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            department TEXT DEFAULT 'default',
+            role TEXT DEFAULT 'user',
+            metadata TEXT DEFAULT '{}',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS face_embeddings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            person_id TEXT NOT NULL,
+            embedding BLOB NOT NULL,
+            model_version TEXT DEFAULT 'arcface_v1',
+            quality_score REAL DEFAULT 1.0,
+            source_image_path TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (person_id) REFERENCES persons(person_id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS access_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            person_id TEXT,
+            device_id TEXT,
+            similarity REAL,
+            margin REAL,
+            status TEXT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+        self._sqlite_conn.commit()
+
+        # Load existing persons into cache
+        cur = self._sqlite_conn.cursor()
+        cur.execute("SELECT person_id, name, department, role, metadata FROM persons;")
+        for row in cur.fetchall():
+            meta = json.loads(row[4]) if row[4] else {}
+            self._mem_persons[row[0]] = {
+                "person_id": row[0],
+                "name": row[1],
+                "department": row[2],
+                "role": row[3],
+                "metadata": meta,
+            }
+
+        # Load existing embeddings into cache
+        cur.execute("SELECT id, person_id, embedding, model_version, quality_score, source_image_path FROM face_embeddings;")
+        for row in cur.fetchall():
+            emb_arr = np.frombuffer(row[2], dtype=np.float32).copy()
+            self._mem_embeddings.append({
+                "id": row[0],
+                "person_id": row[1],
+                "embedding": emb_arr,
+                "model_version": row[3],
+                "quality_score": float(row[4]) if row[4] is not None else 1.0,
+                "source_image_path": row[5],
+            })
+        logger.info(
+            f"SQLite DB initialized at {self.sqlite_path}. "
+            f"Loaded {len(self._mem_persons)} persons and {len(self._mem_embeddings)} embeddings into cache."
+        )
 
     def _connect(self) -> None:
         if psycopg is None:
@@ -80,7 +155,8 @@ class DatabaseClient:
 
         try:
             self._conn = psycopg.connect(self.conn_info, autocommit=True)
-            register_vector(self._conn)
+            if register_vector is not None:
+                register_vector(self._conn)
             logger.info("Connected to PostgreSQL + pgvector successfully.")
         except Exception as e:
             if self.fallback_to_memory:
@@ -91,7 +167,7 @@ class DatabaseClient:
 
     def init_schema(self, sql_file_path: Optional[str] = None) -> None:
         """Runs DDL initialization scripts."""
-        if self.use_memory:
+        if self.use_memory or self.use_sqlite:
             return
 
         if sql_file_path:
@@ -103,6 +179,8 @@ class DatabaseClient:
     def close(self) -> None:
         if self._conn and not self._conn.closed:
             self._conn.close()
+        if self._sqlite_conn:
+            self._sqlite_conn.close()
 
     # -------------------------------------------------------------
     # Identity Management (Persons)
@@ -118,6 +196,30 @@ class DatabaseClient:
     ) -> dict[str, Any]:
         """Registers a new individual identity."""
         metadata = metadata or {}
+
+        if self.use_sqlite and self._sqlite_conn:
+            with self._sqlite_conn:
+                self._sqlite_conn.execute(
+                    """
+                    INSERT INTO persons (person_id, name, department, role, metadata)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT (person_id) DO UPDATE SET
+                        name = excluded.name,
+                        department = excluded.department,
+                        role = excluded.role,
+                        metadata = excluded.metadata;
+                    """,
+                    (person_id, name, department, role, json.dumps(metadata)),
+                )
+            record = {
+                "person_id": person_id,
+                "name": name,
+                "department": department,
+                "role": role,
+                "metadata": metadata,
+            }
+            self._mem_persons[person_id] = record
+            return record
 
         if self.use_memory:
             record = {
@@ -150,7 +252,7 @@ class DatabaseClient:
 
     def get_person(self, person_id: str) -> Optional[dict[str, Any]]:
         """Fetches person info by person_id."""
-        if self.use_memory:
+        if self.use_sqlite or self.use_memory:
             return self._mem_persons.get(person_id)
 
         sql = "SELECT person_id, name, department, role, metadata FROM persons WHERE person_id = %s;"
@@ -169,7 +271,7 @@ class DatabaseClient:
 
     def list_persons(self) -> list[dict[str, Any]]:
         """Lists all registered identities."""
-        if self.use_memory:
+        if self.use_sqlite or self.use_memory:
             return list(self._mem_persons.values())
 
         sql = "SELECT person_id, name, department, role, metadata FROM persons ORDER BY created_at DESC;"
@@ -183,6 +285,15 @@ class DatabaseClient:
 
     def delete_person(self, person_id: str) -> bool:
         """Deletes person and cascading embeddings."""
+        if self.use_sqlite and self._sqlite_conn:
+            with self._sqlite_conn:
+                cur = self._sqlite_conn.execute("DELETE FROM persons WHERE person_id = ?;", (person_id,))
+                deleted = cur.rowcount > 0
+            if person_id in self._mem_persons:
+                del self._mem_persons[person_id]
+            self._mem_embeddings = [e for e in self._mem_embeddings if e["person_id"] != person_id]
+            return deleted
+
         if self.use_memory:
             if person_id in self._mem_persons:
                 del self._mem_persons[person_id]
@@ -212,6 +323,27 @@ class DatabaseClient:
         norm = np.linalg.norm(emb)
         if norm > 1e-6:
             emb = emb / norm
+
+        if self.use_sqlite and self._sqlite_conn:
+            emb_blob = emb.tobytes()
+            with self._sqlite_conn:
+                cur = self._sqlite_conn.execute(
+                    """
+                    INSERT INTO face_embeddings (person_id, embedding, model_version, quality_score, source_image_path)
+                    VALUES (?, ?, ?, ?, ?);
+                    """,
+                    (person_id, emb_blob, model_version, quality_score, source_image_path),
+                )
+                new_id = cur.lastrowid or (len(self._mem_embeddings) + 1)
+            self._mem_embeddings.append({
+                "id": new_id,
+                "person_id": person_id,
+                "embedding": emb,
+                "model_version": model_version,
+                "quality_score": quality_score,
+                "source_image_path": source_image_path,
+            })
+            return int(new_id)
 
         if self.use_memory:
             new_id = len(self._mem_embeddings) + 1
@@ -249,7 +381,7 @@ class DatabaseClient:
         if norm > 1e-6:
             q = q / norm
 
-        if self.use_memory:
+        if self.use_sqlite or self.use_memory:
             matches = []
             for item in self._mem_embeddings:
                 if item["model_version"] == model_version:
@@ -354,6 +486,17 @@ class DatabaseClient:
         status: str,
     ) -> None:
         """Logs verification/recognition event."""
+        if self.use_sqlite and self._sqlite_conn:
+            with self._sqlite_conn:
+                self._sqlite_conn.execute(
+                    """
+                    INSERT INTO access_logs (person_id, device_id, similarity, margin, status)
+                    VALUES (?, ?, ?, ?, ?);
+                    """,
+                    (person_id, device_id, similarity, margin, status),
+                )
+            return
+
         if self.use_memory:
             self._mem_logs.append({
                 "person_id": person_id,

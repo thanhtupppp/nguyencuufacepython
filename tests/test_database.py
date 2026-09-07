@@ -98,3 +98,41 @@ def test_recognize_with_margin(db_client):
     dec3 = db_client.recognize_with_margin(query_unknown, threshold=0.60, margin=0.08)
     assert dec3.status == "UNKNOWN"
     assert dec3.person_id is None
+
+
+def test_sqlite_persistence(tmp_path):
+    """Verify SQLite persists persons, embeddings, and access logs across sessions."""
+    db_file = tmp_path / "test_faces.db"
+
+    # Session 1: Create client, enroll person and embedding
+    client1 = DatabaseClient(sqlite_path=db_file)
+    client1.create_person("user_001", "Charlie", department="Security", metadata={"badge": "A1"})
+    vec = np.zeros(512, dtype=np.float32)
+    vec[0] = 1.0
+    client1.add_embedding("user_001", vec, model_version="arcface_v1")
+    client1.log_access("user_001", "cam_01", 0.95, 0.20, "MATCHED")
+    client1.close()
+
+    # Session 2: Reopen SQLite DB from same path
+    client2 = DatabaseClient(sqlite_path=db_file)
+    p = client2.get_person("user_001")
+    assert p is not None
+    assert p["name"] == "Charlie"
+    assert p["metadata"]["badge"] == "A1"
+
+    # Verify vector search retrieves the persisted identity
+    query = np.zeros(512, dtype=np.float32)
+    query[0] = 0.98
+    query[1] = 0.05
+    query /= np.linalg.norm(query)
+    candidates = client2.search_top_k(query, top_k=1)
+    assert len(candidates) == 1
+    assert candidates[0].person_id == "user_001"
+    assert candidates[0].similarity > 0.95
+
+    # Test delete cascade
+    assert client2.delete_person("user_001") is True
+    assert client2.get_person("user_001") is None
+    assert len(client2.search_top_k(query, top_k=1)) == 0
+    client2.close()
+

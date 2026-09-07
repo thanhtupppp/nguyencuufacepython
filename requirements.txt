@@ -5,8 +5,8 @@ scipy>=1.10.0
 # Computer Vision & Image Processing
 opencv-python>=4.8.0
 
-# ONNX Runtime for Inference
-onnxruntime>=1.16.0
+# ONNX Runtime for Inference (DirectML for NVIDIA/AMD/Intel GPU on Windows or CPU fallback)
+onnxruntime-directml>=1.18.0
 
 # Machine Learning Metrics & Evaluation
 scikit-learn>=1.3.0

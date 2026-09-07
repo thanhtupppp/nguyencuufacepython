@@ -3,8 +3,9 @@ ArcFace recognition module using ONNX Runtime.
 Outputs 512-dimensional L2-normalized feature vectors.
 """
 
+import os
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Optional, Union
 import cv2
 import numpy as np
 
@@ -33,12 +34,16 @@ class ArcFaceRecognizer(BaseFaceRecognizer):
         self._model_version = model_version
         self._embedding_dim = 512
         self.model_path = Path(model_path) if model_path else None
-        self.session = None
+        self.session: Any = None
 
         if providers is None:
-            # Prefer CUDA if available, fallback to CPU
+            # Prefer CUDA/DirectML GPU if available, fallback to CPU
             available = ort.get_available_providers() if ort else []
-            self.providers = [p for p in ["CUDAExecutionProvider", "CPUExecutionProvider"] if p in available]
+            self.providers = [
+                p
+                for p in ["CUDAExecutionProvider", "DmlExecutionProvider", "CPUExecutionProvider"]
+                if p in available
+            ]
             if not self.providers and ort:
                 self.providers = ["CPUExecutionProvider"]
         else:
@@ -54,6 +59,9 @@ class ArcFaceRecognizer(BaseFaceRecognizer):
 
         session_options = ort.SessionOptions()
         session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        # Cap CPU threads to prevent thrashing high-core CPUs (e.g. 48 cores)
+        session_options.intra_op_num_threads = min(4, os.cpu_count() or 4)
+        session_options.inter_op_num_threads = 1
         self.session = ort.InferenceSession(
             str(self.model_path), sess_options=session_options, providers=self.providers
         )

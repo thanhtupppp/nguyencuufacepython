@@ -4,9 +4,10 @@ Prevents presentation attacks (printed photos, screen replay attacks, 2D paper m
 using multi-scale crop analysis and deep learning liveness models (MiniFASNet).
 """
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Optional, Union
 import cv2
 import numpy as np
 
@@ -49,10 +50,10 @@ def crop_face_with_scale(
     scaled_w = w * scale
     scaled_h = h * scale
 
-    new_x1 = int(round(center_x - scaled_w / 2.0))
-    new_y1 = int(round(center_y - scaled_h / 2.0))
-    new_x2 = int(round(center_x + scaled_w / 2.0))
-    new_y2 = int(round(center_y + scaled_h / 2.0))
+    new_x1 = round(center_x - scaled_w / 2.0)
+    new_y1 = round(center_y - scaled_h / 2.0)
+    new_x2 = round(center_x + scaled_w / 2.0)
+    new_y2 = round(center_y + scaled_h / 2.0)
 
     img_h, img_w = image.shape[:2]
 
@@ -138,11 +139,15 @@ class AntiSpoofDetector:
         self.model_path = Path(model_path) if model_path else None
         self.threshold = threshold
         self.scales = scales
-        self.session = None
+        self.session: Any = None
 
         if providers is None:
             available = ort.get_available_providers() if ort else []
-            self.providers = [p for p in ["CUDAExecutionProvider", "CPUExecutionProvider"] if p in available]
+            self.providers = [
+                p
+                for p in ["CUDAExecutionProvider", "DmlExecutionProvider", "CPUExecutionProvider"]
+                if p in available
+            ]
             if not self.providers and ort:
                 self.providers = ["CPUExecutionProvider"]
         else:
@@ -157,6 +162,9 @@ class AntiSpoofDetector:
 
         session_options = ort.SessionOptions()
         session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        # Cap CPU threads to prevent thrashing high-core CPUs (e.g. 48 cores)
+        session_options.intra_op_num_threads = min(4, os.cpu_count() or 4)
+        session_options.inter_op_num_threads = 1
         self.session = ort.InferenceSession(
             str(self.model_path), sess_options=session_options, providers=self.providers
         )

@@ -85,6 +85,7 @@ def run_benchmark(
         # Assume 112x112 aligned face or resize
         if img.shape[:2] != (112, 112):
             img = cv2.resize(img, (112, 112))
+        assert recognizer is not None
         emb = recognizer.extract_embedding(img)
         embedding_cache[img_path_str] = emb
         return emb
@@ -97,7 +98,7 @@ def run_benchmark(
         try:
             emb1 = get_embedding(row["path1"])
             emb2 = get_embedding(row["path2"])
-            sim = float(compute_cosine_similarity(emb1, emb2))
+            sim = compute_cosine_similarity(emb1, emb2)
             gen_scores.append(sim)
             gen_records.append({
                 "path1": row["path1"],
@@ -119,7 +120,7 @@ def run_benchmark(
         try:
             emb1 = get_embedding(row["path1"])
             emb2 = get_embedding(row["path2"])
-            sim = float(compute_cosine_similarity(emb1, emb2))
+            sim = compute_cosine_similarity(emb1, emb2)
             imp_scores.append(sim)
             imp_records.append({
                 "path1": row["path1"],
@@ -187,9 +188,11 @@ def run_benchmark(
     # 4. Generate Markdown Report
     report_md = results_dir / "threshold_report.md"
     with open(report_md, "w", encoding="utf-8") as f:
+        model_name = "Mock Synthetic Recognizer" if mock_mode or recognizer is None else recognizer.model_name
+        model_version = "mock_v1" if mock_mode or recognizer is None else recognizer.model_version
         f.write("# Báo Cáo Đo Lường Hiệu Năng Nhận Diện Khuôn Mặt (Benchmark Report)\n\n")
-        f.write(f"- **Mô hình**: {'Mock Synthetic Recognizer' if mock_mode else recognizer.model_name}\n")
-        f.write(f"- **Phiên bản Embedding**: {'mock_v1' if mock_mode else recognizer.model_version}\n")
+        f.write(f"- **Mô hình**: {model_name}\n")
+        f.write(f"- **Phiên bản Embedding**: {model_version}\n")
         f.write(f"- **Tổng số cặp Genuine**: {len(gen_scores_arr)}\n")
         f.write(f"- **Tổng số cặp Impostor**: {len(imp_scores_arr)}\n\n")
 

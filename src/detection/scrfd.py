@@ -3,8 +3,9 @@ SCRFD Face Detector module using ONNX Runtime.
 Detects face bounding boxes and 5 facial landmarks (left eye, right eye, nose, left mouth, right mouth).
 """
 
+import os
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Optional, Union
 import cv2
 import numpy as np
 
@@ -89,11 +90,15 @@ class SCRFDDetector:
         self.conf_threshold = conf_threshold
         self.nms_threshold = nms_threshold
         self.input_size = input_size
-        self.session = None
+        self.session: Any = None
 
         if providers is None:
             available = ort.get_available_providers() if ort else []
-            self.providers = [p for p in ["CUDAExecutionProvider", "CPUExecutionProvider"] if p in available]
+            self.providers = [
+                p
+                for p in ["CUDAExecutionProvider", "DmlExecutionProvider", "CPUExecutionProvider"]
+                if p in available
+            ]
             if not self.providers and ort:
                 self.providers = ["CPUExecutionProvider"]
         else:
@@ -113,6 +118,9 @@ class SCRFDDetector:
 
         session_options = ort.SessionOptions()
         session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        # Cap CPU threads to prevent thrashing high-core CPUs (e.g. 48 cores)
+        session_options.intra_op_num_threads = min(4, os.cpu_count() or 4)
+        session_options.inter_op_num_threads = 1
         self.session = ort.InferenceSession(
             str(self.model_path), sess_options=session_options, providers=self.providers
         )
@@ -165,7 +173,7 @@ class SCRFDDetector:
             kps = net_outs[idx + self.fmc * 2] * stride if len(net_outs) > self.fmc * 2 else None
 
             height, width = input_h // stride, input_w // stride
-            anchor_centers = np.stack(np.mgrid[:height, :width][::-1], axis=-1).astype(np.float32)
+            anchor_centers = np.stack(list(np.mgrid[:height, :width][::-1]), axis=-1).astype(np.float32)
             anchor_centers = (anchor_centers * stride).reshape((-1, 2))
             if self._num_anchors > 1:
                 anchor_centers = np.stack([anchor_centers] * self._num_anchors, axis=1).reshape((-1, 2))
@@ -186,20 +194,20 @@ class SCRFDDetector:
 
         scores = np.vstack(scores_list).ravel()
         bboxes = np.vstack(bboxes_list)
-        kpss = np.vstack(kps_list) if kps_list else None
+        all_kpss: Optional[np.ndarray] = np.vstack(kps_list) if kps_list else None
 
         # Re-scale back to original image size
         bboxes[:, :4] /= scale
-        if kpss is not None:
-            kpss /= scale
+        if all_kpss is not None:
+            all_kpss /= scale
 
         keep = nms_cpu(bboxes, scores, self.nms_threshold)
 
         results = []
         for k in keep:
             landmarks = None
-            if kpss is not None:
-                landmarks = kpss[k].reshape(5, 2)
+            if all_kpss is not None:
+                landmarks = all_kpss[k].reshape(5, 2)
             results.append({
                 "bbox": bboxes[k].tolist(),
                 "score": float(scores[k]),

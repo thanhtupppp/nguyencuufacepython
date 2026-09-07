@@ -10,7 +10,7 @@ import numpy as np
 
 def draw_face_canvas(seed_id: int, variant_name: str) -> np.ndarray:
     """Draws a 112x112 synthetic face canvas with identifiable geometric patterns."""
-    canvas = np.zeros((112, 112, 3), dtype=np.uint8)
+    canvas: np.ndarray = np.zeros((112, 112, 3), dtype=np.uint8)
     rng = np.random.RandomState(seed_id)
     base_color = rng.randint(50, 200, size=3).tolist()
 
@@ -32,8 +32,8 @@ def draw_face_canvas(seed_id: int, variant_name: str) -> np.ndarray:
         pass  # Clean
     elif variant_name == "angle":
         # Slight perspective shift
-        pts1 = np.float32([[0, 0], [112, 0], [0, 112], [112, 112]])
-        pts2 = np.float32([[15, 5], [105, 0], [15, 105], [105, 112]])
+        pts1 = np.array([[0, 0], [112, 0], [0, 112], [112, 112]], dtype=np.float32)
+        pts2 = np.array([[15, 5], [105, 0], [15, 105], [105, 112]], dtype=np.float32)
         m = cv2.getPerspectiveTransform(pts1, pts2)
         canvas = cv2.warpPerspective(canvas, m, (112, 112))
     elif variant_name == "low_light":

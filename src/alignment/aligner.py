@@ -127,6 +127,6 @@ class FaceAligner:
             self.output_size,
             flags=cv2.INTER_LINEAR,
             borderMode=cv2.BORDER_CONSTANT,
-            borderValue=0.0,
+            borderValue=(0.0, 0.0, 0.0),
         )
         return aligned, m

@@ -31,4 +31,11 @@ Nhật ký các nhiệm vụ đã hoàn thành:
   - `scripts/init_db.py`: Migration CLI runner.
   - `src/database/client.py`: `DatabaseClient` hỗ trợ PostgreSQL pgvector và in-memory fallback.
   - `tests/test_database.py`: 3 unit tests kiểm tra CRUD, vector search, Dual-Threshold margin decision.
+- [x] **2026-09-06**: Tải và xác thực thành công bộ trọng số mô hình chính thức:
+  - `models/checkpoints/det_10g.onnx` (SCRFD 10G Face Detector - 16.9MB)
+  - `models/checkpoints/w600k_r50.onnx` (ArcFace ResNet-50 512D - 174MB)
+- [x] **2026-09-06**: Xây dựng ứng dụng kiểm thử trực tiếp qua Webcam [scripts/webcam_demo.py](file:///d:/nguyencuufacepython/scripts/webcam_demo.py):
+  - Tích hợp 100% pipeline: Camera $\rightarrow$ SCRFD $\rightarrow$ 5 Landmarks $\rightarrow$ Quality Gate $\rightarrow$ Anti-Spoofing $\rightarrow$ Umeyama 112×112 $\rightarrow$ ArcFace 512D $\rightarrow$ Vector Search $\rightarrow$ Temporal Voting.
+  - Hỗ trợ phím tắt: `[e]` đăng ký người mới trực tiếp, `[c]` xóa database, `[q]` thoát.
+  - Đã kiểm tra thực tế trên Webcam ID 0 của máy: Nhận diện khuôn mặt thành công!
 - [x] **2026-09-06**: Toàn bộ **25/25 Unit Tests** đạt trạng thái **PASSED 100%**.

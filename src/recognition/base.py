@@ -63,6 +63,6 @@ class BaseFaceRecognizer(ABC):
         """
         if embedding.ndim == 1:
             norm = np.linalg.norm(embedding)
-            return embedding / max(norm, eps)
+            return embedding / max(float(norm), eps)
         norm = np.linalg.norm(embedding, axis=1, keepdims=True)
         return embedding / np.maximum(norm, eps)

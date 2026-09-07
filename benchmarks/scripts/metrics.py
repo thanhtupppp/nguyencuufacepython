@@ -6,12 +6,12 @@ Mathematical and statistical metrics for face recognition evaluation:
 - Top-1 Accuracy and Top-2 Margin decision simulation
 """
 
-from typing import Any, Optional
+from typing import Any, Optional, Union
 import numpy as np
 import pandas as pd
 
 
-def compute_cosine_similarity(emb1: np.ndarray, emb2: np.ndarray) -> np.ndarray:
+def compute_cosine_similarity(emb1: np.ndarray, emb2: np.ndarray) -> Union[float, np.ndarray]:
     """
     Computes cosine similarity between two sets of embeddings.
     If 1D arrays: returns scalar float.
@@ -103,16 +103,17 @@ def compute_roc_and_rates(
         # Find index with largest FAR <= target_far
         valid_indices = np.where(far_arr <= target_far)[0]
         if len(valid_indices) > 0:
-            best_idx = valid_indices[0]
+            best_idx = int(valid_indices[0])
             tar_val = float(tar_arr[best_idx])
             t_val = float(thresholds[best_idx])
         else:
+            best_idx = -1
             tar_val = float(tar_arr[-1])
             t_val = float(thresholds[-1])
         tar_at_far_targets[f"TAR@FAR={target_far}"] = {
             "TAR": tar_val,
             "threshold": t_val,
-            "actual_FAR": float(far_arr[best_idx if len(valid_indices) > 0 else -1]),
+            "actual_FAR": float(far_arr[best_idx]),
         }
 
     return {
@@ -148,14 +149,14 @@ def evaluate_gallery_probe(
     """
     # Flatten gallery into matrix and label list
     gallery_vectors = []
-    gallery_ids = []
+    gallery_ids_list: list[str] = []
     for pid, emb_list in gallery_embeddings.items():
         for emb in emb_list:
             gallery_vectors.append(emb)
-            gallery_ids.append(pid)
+            gallery_ids_list.append(pid)
 
     gallery_matrix = np.vstack(gallery_vectors)  # (G, D)
-    gallery_ids = np.array(gallery_ids)
+    gallery_ids = np.array(gallery_ids_list)
 
     total_probes = len(probe_samples)
     correct_matches = 0

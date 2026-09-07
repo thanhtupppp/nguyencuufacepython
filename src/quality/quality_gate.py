@@ -5,7 +5,7 @@ BEFORE passing them to the feature extraction / recognition engine.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional, Sequence, Union
 import cv2
 import numpy as np
 
@@ -35,12 +35,12 @@ class FaceQualityGate:
         self,
         min_face_size: int = 60,
         optimal_face_size: int = 112,
-        blur_threshold: float = 50.0,
-        max_yaw: float = 30.0,
-        max_pitch: float = 30.0,
-        max_roll: float = 25.0,
-        min_brightness: float = 40.0,
-        max_brightness: float = 220.0,
+        blur_threshold: float = 20.0,
+        max_yaw: float = 35.0,
+        max_pitch: float = 35.0,
+        max_roll: float = 30.0,
+        min_brightness: float = 30.0,
+        max_brightness: float = 230.0,
     ):
         self.min_face_size = min_face_size
         self.optimal_face_size = optimal_face_size
@@ -72,23 +72,21 @@ class FaceQualityGate:
         total_eye_dist = dist_left_eye_nose + dist_right_eye_nose
 
         if total_eye_dist > 1e-6:
-            # Ratio deviation from symmetry (0.5 is perfectly frontal)
             sym_ratio = (dist_right_eye_nose - dist_left_eye_nose) / total_eye_dist
-            # Approximate mapping: 0.35 asymmetry ~ 45 degrees yaw
-            yaw = float(np.clip(sym_ratio * 90.0, -90.0, 90.0))
+            yaw = float(np.clip(sym_ratio * 75.0, -90.0, 90.0))
         else:
             yaw = 0.0
 
-        # 3. Pitch: Vertical ratio between eye-nose and nose-mouth
-        eye_center = (left_eye + right_eye) / 2.0
-        mouth_center = (left_mouth + right_mouth) / 2.0
-        v_eye_nose = nose[1] - eye_center[1]
-        v_nose_mouth = mouth_center[1] - nose[1]
+        # 3. Pitch: Vertical ratio between eye-nose distance and eye-mouth distance
+        eye_center_y = (left_eye[1] + right_eye[1]) / 2.0
+        mouth_center_y = (left_mouth[1] + right_mouth[1]) / 2.0
+        total_facial_height = mouth_center_y - eye_center_y
+        v_eye_nose = nose[1] - eye_center_y
 
-        # Canonical ratio for frontal face is approx 1.1 - 1.3
-        if v_nose_mouth > 1e-6:
-            v_ratio = v_eye_nose / v_nose_mouth
-            pitch = float(np.clip((v_ratio - 1.2) * 45.0, -90.0, 90.0))
+        if total_facial_height > 1e-6:
+            # In canonical frontal faces, nose tip is ~55% between eye-line and mouth-line
+            vert_ratio = v_eye_nose / total_facial_height
+            pitch = float(np.clip((vert_ratio - 0.55) * 60.0, -90.0, 90.0))
         else:
             pitch = 0.0
 
@@ -102,7 +100,7 @@ class FaceQualityGate:
     def assess_quality(
         self,
         image: np.ndarray,
-        bbox: list[float] | np.ndarray,
+        bbox: Union[Sequence[Union[float, int]], np.ndarray],
         landmarks: Optional[np.ndarray] = None,
     ) -> QualityAssessmentResult:
         """
@@ -139,7 +137,7 @@ class FaceQualityGate:
             )
 
         face_crop = image[y1_c:y2_c, x1_c:x2_c]
-        face_gray = cv2.cvtColor(face_crop, cv2.COLOR_BGR2GRAY) if face_crop.ndim == 3 else face_crop
+        face_gray: np.ndarray = np.asarray(cv2.cvtColor(face_crop, cv2.COLOR_BGR2GRAY) if face_crop.ndim == 3 else face_crop)
 
         # 2. Blur Check
         blur_score = self.assess_blur(face_gray)
