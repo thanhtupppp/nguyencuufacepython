@@ -335,7 +335,7 @@ export function App() {
                 logs={dispenserLogs}
                 stats={dispenserStats}
                 cooldownMinutes={cooldownMinutes}
-                onClear={() => setDispenserLogs([])}
+                onClear={handleClearLogs}
                 onRefresh={loadDispenserData}
               />
             </div>
