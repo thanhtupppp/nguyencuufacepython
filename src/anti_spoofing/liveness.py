@@ -56,7 +56,6 @@ def crop_face_with_scale(
     center_x = x1 + w / 2.0
     center_y = y1 + h / 2.0
 
-    # Expand box by scale
     scaled_w = w * scale
     scaled_h = h * scale
 
@@ -67,7 +66,6 @@ def crop_face_with_scale(
 
     img_h, img_w = image.shape[:2]
 
-    # Calculate padding if crop goes outside image boundaries
     pad_left = max(0, -new_x1)
     pad_top = max(0, -new_y1)
     pad_right = max(0, new_x2 - img_w)
@@ -102,15 +100,12 @@ def compute_fourier_frequency_score(face_gray: np.ndarray) -> float:
         return 0.0
 
     h, w = face_gray.shape[:2]
-    # Resize to standard analysis size
     resized = cv2.resize(face_gray, (64, 64)) if (h, w) != (64, 64) else face_gray
 
-    # Compute 2D Fast Fourier Transform
     f = np.fft.fft2(resized.astype(np.float32))
     fshift = np.fft.fftshift(f)
     magnitude_spectrum = 20 * np.log(np.abs(fshift) + 1e-6)
 
-    # Calculate high-frequency energy ratio
     cy, cx = magnitude_spectrum.shape[0] // 2, magnitude_spectrum.shape[1] // 2
     r_inner = 8
     r_outer = 24
@@ -124,7 +119,6 @@ def compute_fourier_frequency_score(face_gray: np.ndarray) -> float:
     mid_high_energy = np.mean(magnitude_spectrum[mid_high_mask])
     center_energy = np.mean(magnitude_spectrum[center_mask]) + 1e-6
 
-    # Normalized natural ratio: real skin has smooth spectral roll-off
     ratio = mid_high_energy / center_energy
     score = np.clip(1.0 - abs(ratio - 0.45) * 2.0, 0.0, 1.0)
     return float(score)
@@ -134,6 +128,11 @@ class AntiSpoofDetector:
     """
     Production Anti-Spoofing engine with 3-state decision policy (PASS / FAIL / INCONCLUSIVE).
     Combines Silent-Face MiniFASNet multi-scale models with 2D Fourier texture checks.
+
+    ``strict_mode`` defaults to True because the heuristic-only fallback is not
+    sufficiently trustworthy to authorize identity recognition. Set it to False
+    only for offline heuristic experiments; production authentication must provide
+    a validated liveness model.
     """
 
     def __init__(
@@ -142,7 +141,7 @@ class AntiSpoofDetector:
         threshold: float = 0.85,
         scales: list[float] = [1.0, 2.7],
         providers: Optional[list[str]] = None,
-        strict_mode: bool = False,
+        strict_mode: bool = True,
         min_face_size: int = 60,
         min_brightness: float = 25.0,
         max_brightness: float = 235.0,
@@ -177,7 +176,6 @@ class AntiSpoofDetector:
 
         session_options = ort.SessionOptions()
         session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        # Cap CPU threads to prevent thrashing high-core CPUs (e.g. 48 cores)
         session_options.intra_op_num_threads = min(4, os.cpu_count() or 4)
         session_options.inter_op_num_threads = 1
         self.session = ort.InferenceSession(
@@ -185,13 +183,13 @@ class AntiSpoofDetector:
         )
         self.input_name = self.session.get_inputs()[0].name
         self.output_name = self.session.get_outputs()[0].name
-        self.input_shape = self.session.get_inputs()[0].shape  # typically [1, 3, 80, 80]
+        self.input_shape = self.session.get_inputs()[0].shape
 
     def _preprocess_crop(self, crop: np.ndarray) -> np.ndarray:
         """Prepares crop for MiniFASNet input (NCHW float32)."""
         blob = crop.astype(np.float32)
-        blob = np.transpose(blob, (2, 0, 1))  # (3, 80, 80)
-        blob = np.expand_dims(blob, axis=0)    # (1, 3, 80, 80)
+        blob = np.transpose(blob, (2, 0, 1))
+        blob = np.expand_dims(blob, axis=0)
         return blob
 
     def predict_liveness(
@@ -208,7 +206,6 @@ class AntiSpoofDetector:
         h_box = max(0, y2 - y1)
         h_img, w_img = image.shape[:2]
 
-        # Precondition 1: Face resolution check
         if w_box < self.min_face_size or h_box < self.min_face_size:
             return LivenessResult(
                 is_live=False,
@@ -228,7 +225,6 @@ class AntiSpoofDetector:
                 reason="INVALID_CROP",
             )
 
-        # Precondition 2: Illumination check
         gray_tight = (
             cv2.cvtColor(crop_tight, cv2.COLOR_BGR2GRAY)
             if crop_tight.ndim == 3
@@ -244,10 +240,8 @@ class AntiSpoofDetector:
                 reason="EXTREME_ILLUMINATION",
             )
 
-        # 1. Fourier texture analysis
         fourier_score = compute_fourier_frequency_score(gray_tight)
 
-        # 2. Deep learning multi-scale inference
         scale_scores = {}
         if self.session is not None:
             for scale in self.scales:
@@ -269,7 +263,6 @@ class AntiSpoofDetector:
                 is_live = False
                 attack_type = "SCREEN_REPLAY_MOIRE" if fourier_score < 0.5 else "PRINT_ATTACK"
         else:
-            # Model weights not loaded
             if self.strict_mode:
                 return LivenessResult(
                     is_live=False,
@@ -281,7 +274,6 @@ class AntiSpoofDetector:
                     fourier_score=fourier_score,
                 )
 
-            # Non-strict fallback heuristic
             overall_liveness = fourier_score
             scale_scores = {"fourier_heuristic": fourier_score}
             if overall_liveness >= self.threshold:
