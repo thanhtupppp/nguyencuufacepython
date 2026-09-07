@@ -327,25 +327,39 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
                 </button>
               </div>
             ) : (
-              // ----------------- MASK / OCCLUDED / NO FACE ALERT -----------------
+              // ----------------- MASK / OCCLUDED / NO FACE / SERVER ERROR -----------------
               <div className="space-y-4 max-w-md">
                 <div className="w-20 h-20 mx-auto rounded-3xl bg-rose-500/20 border-2 border-rose-500/60 flex items-center justify-center text-4xl shadow-[0_0_40px_rgba(244,63,94,0.3)] animate-pulse">
-                  {result.status === 'MASK_DETECTED' ? '😷' : result.status === 'OCCLUSION_DETECTED' ? '✋' : '👤'}
+                  {result.status === 'MASK_DETECTED'
+                    ? '😷'
+                    : result.status === 'OCCLUSION_DETECTED'
+                    ? '✋'
+                    : result.status === 'ERROR'
+                    ? '⚠️'
+                    : '👤'}
                 </div>
                 <div>
                   <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-rose-950 border border-rose-700 text-rose-300 text-xs font-semibold mb-2">
                     <AlertTriangle className="w-3.5 h-3.5" />
-                    <span>YÊU CẦU XÁC THỰC KHUÔN MẶT</span>
+                    <span>
+                      {result.status === 'ERROR'
+                        ? 'LỖI KẾT NỐI MÁY CHỦ'
+                        : 'YÊU CẦU XÁC THỰC KHUÔN MẶT'}
+                    </span>
                   </div>
                   <h3 className="text-lg sm:text-xl font-bold text-white">
                     {result.status === 'MASK_DETECTED'
                       ? 'Vui Lòng Tháo Khẩu Trang!'
                       : result.status === 'OCCLUSION_DETECTED'
                       ? 'Khuôn Mặt Bị Che Khuất!'
+                      : result.status === 'ERROR'
+                      ? 'Chưa Khởi Động Lại Backend Server!'
                       : 'Không Tìm Thấy Khuôn Mặt!'}
                   </h3>
                   <p className="text-xs sm:text-sm text-rose-300 mt-2 font-medium">
-                    {result.message}
+                    {result.status === 'ERROR' && result.message === 'Not Found'
+                      ? 'FastAPI Backend chưa nhận diện được đường dẫn /api/v1/dispenser. Vui lòng tắt terminal chạy python scripts/run_server.py và chạy lại với cờ --reload!'
+                      : result.message}
                   </p>
                 </div>
 

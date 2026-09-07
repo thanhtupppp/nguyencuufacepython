@@ -57,6 +57,7 @@ def main() -> None:
     print(f" * WebSocket Event Stream: ws://localhost:{args.port}/ws/v1/events")
     print(" * Quan ly danh tinh:      /api/v1/persons")
     print(" * Nhan dien & Xac thuc:   /api/v1/faces (enroll, recognize, verify)")
+    print(" * Kiosk cap giay ve sinh: /api/v1/dispenser (request-paper, stats, logs)")
     print(" * Ban su kien Edge:       /api/v1/events")
     print("-" * 70)
 
