@@ -26,7 +26,6 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.mark.integration
 def test_command_round_trip_and_request_id_deduplication() -> None:
     host = os.getenv("MQTT_HOST", "127.0.0.1")
     port = int(os.getenv("MQTT_PORT", "1883"))
@@ -63,7 +62,6 @@ def test_command_round_trip_and_request_id_deduplication() -> None:
         publisher.publish(adapter.command_topic, payload=payload, qos=1, retain=False).wait_for_publish(5)
         assert done.wait(5), "command was not delivered"
 
-        # Same request_id simulates QoS-1 duplicate delivery.
         publisher.publish(adapter.command_topic, payload=payload, qos=1, retain=False).wait_for_publish(5)
         time.sleep(0.5)
         assert len(received) == 1
@@ -74,7 +72,6 @@ def test_command_round_trip_and_request_id_deduplication() -> None:
         adapter.disconnect()
 
 
-@pytest.mark.integration
 def test_state_is_retained_and_availability_is_retained() -> None:
     host = os.getenv("MQTT_HOST", "127.0.0.1")
     port = int(os.getenv("MQTT_PORT", "1883"))
@@ -101,7 +98,6 @@ def test_state_is_retained_and_availability_is_retained() -> None:
         subscriber.connect(host, port, 60)
         subscriber.subscribe(adapter.state_topic, qos=1)
         subscriber.subscribe(adapter.availability_topic, qos=1)
-        subscriber.on_message = on_message
         subscriber.loop_start()
         assert done.wait(5), "retained state/availability not observed"
         assert any(topic == adapter.state_topic and retained for topic, _, retained in messages)
