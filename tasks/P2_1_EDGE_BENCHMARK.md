@@ -27,11 +27,13 @@ Do not introduce FP16/INT8 until the FP32/FP baseline and accuracy threshold are
 - CPU utilization where available
 - embedding cosine parity against the reference PC CPU run
 
-The repository now provides `benchmarks/scripts/benchmark_onnx_runtime.py` for repeatable single-model runtime measurements. It records session creation, p50/p95/p99/mean latency, throughput, provider actually used, and model I/O metadata. It uses deterministic zero-valued inputs only for runtime timing; these numbers must never be presented as recognition accuracy.
+The repository provides `benchmarks/scripts/benchmark_onnx_runtime.py` for repeatable single-model runtime measurements. It records session creation, p50/p95/p99/mean latency, throughput, model SHA-256, provider metadata, thread configuration and model I/O metadata. The runner now fails closed if the requested provider is not active after session creation, preventing accidental CPU-fallback results from being reported as accelerator measurements. It uses deterministic zero-valued inputs only for runtime timing; these numbers must never be presented as recognition accuracy.
 
 Example:
 
 `python benchmarks/scripts/benchmark_onnx_runtime.py --model /path/model.onnx --provider CPUExecutionProvider --warmup 20 --iterations 100 --out benchmarks/results/model_cpu.json`
+
+Thread-sensitive targets should additionally record explicit `--intra-op-threads` and `--inter-op-threads` values. Compare a small predefined matrix rather than tuning until a single best-looking run appears; the chosen setting must be reproducible.
 
 For a full recognition benchmark, use the real-model runner and real images so SCRFD detection, five-point alignment and ArcFace embedding semantics are measured together.
 
@@ -40,6 +42,8 @@ For a full recognition benchmark, use the real-model runner and real images so S
 A device run is not considered comparable unless model SHA-256, preprocessing, input dimensions and output normalization match the reference.
 
 Accuracy parity is a hard gate: optimized/mobile execution must not materially change recognition decisions at the locked threshold/margin. Any FP16/INT8 proposal requires a paired accuracy report before adoption.
+
+A provider result is invalid if the requested provider is merely available but not active in the created session.
 
 ## Platform plan
 
