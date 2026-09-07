@@ -16,6 +16,8 @@ jobs:
           python-version: '3.11'
       - name: Install MQTT test dependencies
         run: python -m pip install -U pip paho-mqtt pytest
+      - name: Check database import boundary
+        run: python tools/check_database_imports.py
       - name: Start Mosquitto
         run: docker compose up -d mqtt
       - name: Wait for broker health
