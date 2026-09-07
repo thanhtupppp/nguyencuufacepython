@@ -9,11 +9,12 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 - [x] Dual decision rule: score + top1-top2 margin.
 - [x] Benchmark preflight validation, gồm duplicate/reversed-pair leakage và CSV label consistency.
 - [x] Real-model runner: SCRFD -> 5 landmarks -> Umeyama 112x112 -> ArcFace -> 512D L2.
+- [x] External ONNX asset fingerprint/contract inspector.
 - [ ] Cấp SCRFD ONNX hợp lệ + SHA-256.
 - [ ] Cấp ArcFace/InsightFace ONNX hợp lệ + SHA-256.
 - [ ] Cấp gallery/probe images và validation/locked-test split.
 - [ ] Chạy benchmark thật và xuất metrics/ROC/report.
-- [ ] Khóa threshold + margin từ validation בלבד.
+- [ ] Khóa threshold + margin từ validation.
 
 ### P0.2 Quality Gate — IMPLEMENTED / CALIBRATION PENDING
 - [x] Face size, blur, brightness, pose.
@@ -51,7 +52,9 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 
 ### P1.3 Multi-device — PARTIAL
 - [x] WebSocket event transport.
-- [ ] MQTT command/state contract cho ESP32.
+- [x] MQTT v1 topic/payload contract + validation tests.
+- [ ] MQTT broker adapter/client implementation.
+- [ ] MQTT command/state integration tests.
 - [ ] HTTP/WebSocket adapter tests.
 - [ ] Multi-camera device/session model.
 
@@ -71,4 +74,4 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 
 ## Current execution order
 
-P0.1 real-model benchmark -> P0.2 quality calibration -> P0.3 tracking benchmark -> P0.4 liveness calibration -> P1 integration tests -> multi-camera/device transport -> edge benchmarks -> model A/B.
+P0.1 real-model benchmark (blocked on assets/data) -> P1.3 MQTT broker adapter/transport tests -> P0.2 quality calibration -> P0.3 tracking benchmark -> P0.4 liveness calibration -> P1 integration tests -> multi-camera/device transport -> edge benchmarks -> model A/B.
