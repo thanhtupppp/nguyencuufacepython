@@ -32,7 +32,6 @@ interface DispenserKioskProps {
   onChangeCooldown: (minutes: number) => void;
   onOpenSettings: () => void;
   viewfinderStyle?: ViewfinderStyle;
-  onCycleViewfinderStyle?: () => void;
 }
 
 export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
@@ -48,7 +47,6 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
   onChangeCooldown,
   onOpenSettings,
   viewfinderStyle = 'hud',
-  onCycleViewfinderStyle,
 }) => {
   const [result, setResult] = useState<DispenseResult | null>(null);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
@@ -210,7 +208,6 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
               isStreaming={isStreaming}
               isProcessing={isProcessing}
               style={viewfinderStyle}
-              onCycleStyle={onCycleViewfinderStyle}
             />
           </>
         ) : (

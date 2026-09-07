@@ -109,14 +109,6 @@ export function App() {
     setCooldownMinutes(updated.cooldown_minutes);
   };
 
-  const handleCycleViewfinderStyle = () => {
-    const styles: ('hud' | 'corners' | 'oval')[] = ['hud', 'corners', 'oval'];
-    const current = dispenserConfig.viewfinder_style || 'hud';
-    const nextIdx = (styles.indexOf(current) + 1) % styles.length;
-    const nextStyle = styles[nextIdx];
-    handleSaveConfig({ ...dispenserConfig, viewfinder_style: nextStyle });
-  };
-
   // Health check polling
   useEffect(() => {
     let isMounted = true;
@@ -307,7 +299,6 @@ export function App() {
                 }}
                 onOpenSettings={() => setIsSettingsOpen(true)}
                 viewfinderStyle={dispenserConfig.viewfinder_style || 'hud'}
-                onCycleViewfinderStyle={handleCycleViewfinderStyle}
               />
             </div>
 

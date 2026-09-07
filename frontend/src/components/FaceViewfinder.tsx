@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScanFace, Sparkles, SlidersHorizontal } from 'lucide-react';
+import { ScanFace, Sparkles } from 'lucide-react';
 
 export type ViewfinderStyle = 'hud' | 'corners' | 'oval';
 
@@ -7,14 +7,12 @@ interface FaceViewfinderProps {
   isStreaming: boolean;
   isProcessing: boolean;
   style?: ViewfinderStyle;
-  onCycleStyle?: () => void;
 }
 
 export const FaceViewfinder: React.FC<FaceViewfinderProps> = ({
   isStreaming,
   isProcessing,
   style = 'hud',
-  onCycleStyle,
 }) => {
   if (!isStreaming) return null;
 
@@ -164,23 +162,6 @@ export const FaceViewfinder: React.FC<FaceViewfinderProps> = ({
           )}
         </div>
       </div>
-
-      {/* ===================================================================== */}
-      {/* STYLE SWITCHER BUTTON (Nằm riêng biệt ở góc dưới bên phải)            */}
-      {/* ===================================================================== */}
-      {onCycleStyle && (
-        <div className="absolute bottom-3 sm:bottom-4 right-3 z-20 pointer-events-auto">
-          <button
-            onClick={onCycleStyle}
-            className="px-2.5 py-1.5 bg-slate-950/85 hover:bg-slate-900 border border-slate-700/80 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-300 rounded-full text-[10px] font-mono transition shadow-xl flex items-center space-x-1"
-            title="Nhấp để chuyển kiểu khung ngắm (HUD / Góc ngắm / Vòng tròn)"
-          >
-            <SlidersHorizontal className="w-3 h-3 text-cyan-400 shrink-0" />
-            <span className="text-slate-400">HUD:</span>
-            <span className="font-bold text-cyan-400 uppercase">{style}</span>
-          </button>
-        </div>
-      )}
     </div>
   );
 };
