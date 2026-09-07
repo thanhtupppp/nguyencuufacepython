@@ -60,7 +60,7 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 - [ ] Execute MQTT broker integration test and capture result.
 - [x] HTTP/WebSocket adapter contract tests.
 - [x] Multi-camera device/session runtime model.
-- [ ] Persist device/session state for multi-worker deployment.
+- [x] Persist device/session state for multi-worker deployment.
 
 ## P2 — Edge + Model A/B
 
@@ -78,4 +78,4 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 
 ## Current execution order
 
-P0.1 real-model benchmark (blocked on assets/data) -> P0.2 quality calibration -> P0.3 tracking benchmark -> P0.4 liveness calibration -> P1 integration tests -> P1.3 MQTT broker execution + distributed device/session persistence -> edge benchmarks -> model A/B.
+P0.1 real-model benchmark (blocked on assets/data) -> P0.2 quality calibration -> P0.3 tracking benchmark -> P0.4 liveness calibration -> P1 integration tests -> P1.3 MQTT broker execution -> P2.1 edge benchmark -> P2.2 model A/B.
