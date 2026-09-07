@@ -299,6 +299,9 @@ export function App() {
                 }}
                 onOpenSettings={() => setIsSettingsOpen(true)}
                 viewfinderStyle={dispenserConfig.viewfinder_style || 'hud'}
+                voiceEnabled={dispenserConfig.voice_enabled ?? true}
+                voiceVolume={dispenserConfig.voice_volume ?? 1.0}
+                voiceRate={dispenserConfig.voice_rate ?? 1.0}
               />
             </div>
 

@@ -32,6 +32,9 @@ interface DispenserKioskProps {
   onChangeCooldown: (minutes: number) => void;
   onOpenSettings: () => void;
   viewfinderStyle?: ViewfinderStyle;
+  voiceEnabled?: boolean;
+  voiceVolume?: number;
+  voiceRate?: number;
 }
 
 export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
@@ -47,13 +50,22 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
   onChangeCooldown,
   onOpenSettings,
   viewfinderStyle = 'hud',
+  voiceEnabled = true,
+  voiceVolume = 1.0,
+  voiceRate = 1.0,
 }) => {
   const [result, setResult] = useState<DispenseResult | null>(null);
-  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(voiceEnabled);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [countdownRemaining, setCountdownRemaining] = useState<number>(0);
   const [autoDismissSeconds, setAutoDismissSeconds] = useState<number>(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Sync audio/voice config with soundEffects controller
+  useEffect(() => {
+    soundEffects.setSoundEnabled(soundEnabled);
+    soundEffects.setVoiceConfig(soundEnabled && voiceEnabled, voiceVolume, voiceRate);
+  }, [soundEnabled, voiceEnabled, voiceVolume, voiceRate]);
 
   // Trigger paper request
   const handleDispenseClick = async () => {
@@ -67,9 +79,25 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
     setAutoDismissSeconds(3);
 
     if (res.granted) {
-      if (soundEnabled) soundEffects.playGranted();
+      if (soundEnabled) {
+        soundEffects.announceGranted(res.name, res.is_new_user);
+      }
     } else {
-      if (soundEnabled) soundEffects.playBlocked();
+      if (soundEnabled) {
+        if (res.status === 'COOLDOWN_BLOCKED') {
+          soundEffects.announceBlocked(res.cooldown_remaining_seconds || 60);
+        } else if (res.status === 'MASK_DETECTED') {
+          soundEffects.announceMaskDetected();
+        } else if (res.status === 'OCCLUSION_DETECTED') {
+          soundEffects.announceOcclusion();
+        } else if (res.status === 'NO_FACE_DETECTED') {
+          soundEffects.announceNoFace();
+        } else if (res.status === 'SPOOF_DETECTED') {
+          soundEffects.announceSpoofDetected();
+        } else {
+          soundEffects.playBlocked();
+        }
+      }
       if (res.status === 'COOLDOWN_BLOCKED' && res.cooldown_remaining_seconds) {
         setCountdownRemaining(res.cooldown_remaining_seconds);
       }

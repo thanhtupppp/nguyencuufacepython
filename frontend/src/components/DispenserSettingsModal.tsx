@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sliders, Clock, Timer, Cpu, Check, RefreshCw, MapPin, ScanFace } from 'lucide-react';
+import { X, Sliders, Clock, Timer, Cpu, Check, RefreshCw, MapPin, ScanFace, Volume2, VolumeX, Play } from 'lucide-react';
 import { DispenserConfig } from '../types';
+import { soundEffects } from '../utils/audio';
 
 interface DispenserSettingsModalProps {
   isOpen: boolean;
@@ -23,6 +24,9 @@ export const DispenserSettingsModal: React.FC<DispenserSettingsModalProps> = ({
   const [viewfinderStyle, setViewfinderStyle] = useState<'hud' | 'corners' | 'oval'>(
     config.viewfinder_style || 'hud'
   );
+  const [voiceEnabled, setVoiceEnabled] = useState<boolean>(config.voice_enabled ?? true);
+  const [voiceVolume, setVoiceVolume] = useState<number>(config.voice_volume ?? 1.0);
+  const [voiceRate, setVoiceRate] = useState<number>(config.voice_rate ?? 1.0);
 
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
@@ -35,6 +39,9 @@ export const DispenserSettingsModal: React.FC<DispenserSettingsModalProps> = ({
     setDeviceId(config.device_id);
     setDeviceName(config.device_name);
     setViewfinderStyle(config.viewfinder_style || 'hud');
+    setVoiceEnabled(config.voice_enabled ?? true);
+    setVoiceVolume(config.voice_volume ?? 1.0);
+    setVoiceRate(config.voice_rate ?? 1.0);
   }, [config, isOpen]);
 
   if (!isOpen) return null;
@@ -46,6 +53,9 @@ export const DispenserSettingsModal: React.FC<DispenserSettingsModalProps> = ({
     setDeviceId('dispenser_01');
     setDeviceName('Máy Cấp Giấy Vệ Sinh #1');
     setViewfinderStyle('hud');
+    setVoiceEnabled(true);
+    setVoiceVolume(1.0);
+    setVoiceRate(1.0);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -59,7 +69,11 @@ export const DispenserSettingsModal: React.FC<DispenserSettingsModalProps> = ({
         device_id: deviceId.trim() || 'dispenser_01',
         device_name: deviceName.trim() || 'Máy Cấp Giấy Vệ Sinh',
         viewfinder_style: viewfinderStyle,
+        voice_enabled: voiceEnabled,
+        voice_volume: Number(voiceVolume),
+        voice_rate: Number(voiceRate),
       });
+      soundEffects.setVoiceConfig(voiceEnabled, voiceVolume, voiceRate);
       setSavedSuccess(true);
       setTimeout(() => {
         setSavedSuccess(false);
@@ -312,7 +326,87 @@ export const DispenserSettingsModal: React.FC<DispenserSettingsModalProps> = ({
 
           <div className="border-t border-slate-800/80" />
 
-          {/* SECTION 5: DEVICE INFO */}
+          {/* SECTION 5: VOICE ANNOUNCEMENTS */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-200 uppercase tracking-wide flex items-center space-x-1.5">
+                <Volume2 className="w-4 h-4 text-cyan-400" />
+                <span>Thông Báo Bằng Giọng Nói Tiếng Việt</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setVoiceEnabled(!voiceEnabled)}
+                className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold transition ${
+                  voiceEnabled
+                    ? 'bg-cyan-600 text-white shadow-sm'
+                    : 'bg-slate-800 text-slate-400'
+                }`}
+              >
+                {voiceEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+                <span>{voiceEnabled ? 'ĐANG BẬT' : 'ĐÃ TẮT'}</span>
+              </button>
+            </div>
+
+            {voiceEnabled && (
+              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-3 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-300">Nghe thử giọng nói:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundEffects.setVoiceConfig(true, voiceVolume, voiceRate);
+                      soundEffects.testVoice();
+                    }}
+                    className="px-3 py-1 bg-cyan-950 hover:bg-cyan-900 border border-cyan-700 text-cyan-300 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition active:scale-95"
+                  >
+                    <Play className="w-3 h-3 fill-cyan-400 text-cyan-400" />
+                    <span>Phát Mẫu Thử</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                      <span>Âm lượng giọng:</span>
+                      <span className="text-cyan-400 font-mono font-bold">{Math.round(voiceVolume * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="1.0"
+                      step="0.1"
+                      value={voiceVolume}
+                      onChange={(e) => setVoiceVolume(parseFloat(e.target.value))}
+                      className="w-full accent-cyan-500 h-1.5 bg-slate-900 rounded-lg cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                      <span>Tốc độ đọc:</span>
+                      <span className="text-cyan-400 font-mono font-bold">{voiceRate.toFixed(1)}x</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.7"
+                      max="1.3"
+                      step="0.1"
+                      value={voiceRate}
+                      onChange={(e) => setVoiceRate(parseFloat(e.target.value))}
+                      className="w-full accent-cyan-500 h-1.5 bg-slate-900 rounded-lg cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-500 italic">
+                  💡 Giọng nói sẽ tự động phát khi: Cấp giấy thành công, nhắc nhở chờ Cooldown, nhắc tháo khẩu trang/bỏ tay che mặt hoặc cảnh báo lỗi.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-slate-800/80" />
+
+          {/* SECTION 6: DEVICE INFO */}
           <div className="space-y-2">
             <label className="text-xs font-bold text-slate-200 uppercase tracking-wide flex items-center space-x-1.5">
               <MapPin className="w-4 h-4 text-cyan-400" />

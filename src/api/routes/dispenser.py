@@ -20,6 +20,9 @@ _dispenser_config = {
     "device_id": "dispenser_01",
     "device_name": "Máy Cấp Giấy Vệ Sinh #1",
     "viewfinder_style": "hud",
+    "voice_enabled": True,
+    "voice_volume": 1.0,
+    "voice_rate": 1.0,
 }
 
 
@@ -30,6 +33,9 @@ class DispenserConfigModel(BaseModel):
     device_id: str = Field(default="dispenser_01", max_length=64)
     device_name: str = Field(default="Máy Cấp Giấy Vệ Sinh #1", max_length=128)
     viewfinder_style: str = Field(default="hud", max_length=32)
+    voice_enabled: bool = Field(default=True)
+    voice_volume: float = Field(default=1.0, ge=0.0, le=1.0)
+    voice_rate: float = Field(default=1.0, ge=0.5, le=2.0)
 
 
 
@@ -333,5 +339,8 @@ async def update_dispenser_config(config: DispenserConfigModel) -> dict:
     _dispenser_config["device_id"] = config.device_id
     _dispenser_config["device_name"] = config.device_name
     _dispenser_config["viewfinder_style"] = config.viewfinder_style
+    _dispenser_config["voice_enabled"] = config.voice_enabled
+    _dispenser_config["voice_volume"] = config.voice_volume
+    _dispenser_config["voice_rate"] = config.voice_rate
     return {"status": "ok", "config": _dispenser_config}
 

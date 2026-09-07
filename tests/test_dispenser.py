@@ -249,6 +249,9 @@ def test_dispenser_config_get_and_update():
             "device_id": "wc_tang1",
             "device_name": "Máy WC Tầng 1",
             "viewfinder_style": "corners",
+            "voice_enabled": True,
+            "voice_volume": 0.9,
+            "voice_rate": 1.1,
         },
     )
     assert res2.status_code == 200
@@ -256,4 +259,7 @@ def test_dispenser_config_get_and_update():
     assert cfg2["cooldown_minutes"] == 3.0
     assert cfg2["device_name"] == "Máy WC Tầng 1"
     assert cfg2["viewfinder_style"] == "corners"
+    assert cfg2["voice_enabled"] is True
+    assert cfg2["voice_volume"] == 0.9
+    assert cfg2["voice_rate"] == 1.1
 

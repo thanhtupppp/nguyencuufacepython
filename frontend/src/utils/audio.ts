@@ -1,10 +1,68 @@
 /**
- * Lightweight Web Audio API sound synthesis for Smart Toilet Paper Dispenser.
- * Eliminates dependencies on external mp3 assets.
+ * Enhanced Audio Controller & Vietnamese Voice Announcement System
+ * for Smart Toilet Paper Dispenser.
+ *
+ * Provides:
+ * 1. Web Audio API synthesized chimes/tones (zero external mp3 assets needed).
+ * 2. Web Speech API Vietnamese Voice Announcements (Offline, instant, natural pronunciation).
  */
 
 class AudioController {
   private ctx: AudioContext | null = null;
+  private soundEnabled: boolean = true;
+  private voiceEnabled: boolean = true;
+  private voiceVolume: number = 1.0;
+  private voiceRate: number = 1.0;
+  private cachedVoice: SpeechSynthesisVoice | null = null;
+
+  constructor() {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      // Chrome/Edge loads voices asynchronously
+      window.speechSynthesis.onvoiceschanged = () => {
+        this.findVietnameseVoice();
+      };
+      this.findVietnameseVoice();
+    }
+  }
+
+  public setSoundEnabled(enabled: boolean) {
+    this.soundEnabled = enabled;
+  }
+
+  public setVoiceConfig(enabled: boolean, volume: number = 1.0, rate: number = 1.0) {
+    this.voiceEnabled = enabled;
+    this.voiceVolume = Math.max(0.1, Math.min(1.0, volume));
+    this.voiceRate = Math.max(0.6, Math.min(1.5, rate));
+  }
+
+  public isVoiceEnabled(): boolean {
+    return this.voiceEnabled;
+  }
+
+  private findVietnameseVoice(): SpeechSynthesisVoice | null {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
+
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices || voices.length === 0) return null;
+
+    // Prioritize native Vietnamese voices (e.g. Google Tiếng Việt, Microsoft HoaiMy, Microsoft NamMinh)
+    const viVoice = voices.find(
+      (v) =>
+        v.lang.toLowerCase() === 'vi-vn' ||
+        v.lang.toLowerCase().startsWith('vi') ||
+        v.name.toLowerCase().includes('vietnam') ||
+        v.name.toLowerCase().includes('vietnamese') ||
+        v.name.toLowerCase().includes('hoaimy') ||
+        v.name.toLowerCase().includes('namminh')
+    );
+
+    if (viVoice) {
+      this.cachedVoice = viVoice;
+      return viVoice;
+    }
+
+    return voices[0] || null;
+  }
 
   private getContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -21,9 +79,47 @@ class AudioController {
   }
 
   /**
-   * Pleasant ascending 2-tone melodic chime for successful dispense.
+   * Speak a phrase in Vietnamese using the Web Speech API.
    */
-  playGranted() {
+  public speak(text: string) {
+    if (!this.voiceEnabled) return;
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+
+    try {
+      window.speechSynthesis.cancel(); // Stop previous voice playback to avoid overlapping
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'vi-VN';
+      utterance.volume = this.voiceVolume;
+      utterance.rate = this.voiceRate;
+      utterance.pitch = 1.0;
+
+      const voice = this.cachedVoice || this.findVietnameseVoice();
+      if (voice) {
+        utterance.voice = voice;
+      }
+
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      // Speech playback failed gracefully
+    }
+  }
+
+  public stopSpeaking() {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+  }
+
+  // =========================================================================
+  // AUDIO SYNTHESIZER SOUND EFFECTS
+  // =========================================================================
+
+  /**
+   * Pleasant ascending 2-tone chime for successful dispense.
+   */
+  public playGranted() {
+    if (!this.soundEnabled) return;
     try {
       const ctx = this.getContext();
       if (!ctx) return;
@@ -53,14 +149,15 @@ class AudioController {
       osc2.start(now + 0.12);
       osc2.stop(now + 0.6);
     } catch {
-      // Audio playback failed silently (e.g. user gesture required)
+      // Audio playback failed silently
     }
   }
 
   /**
-   * Gentle descending warning tone for cooldown block or mask alert.
+   * Gentle descending warning tone for cooldown block or alert.
    */
-  playBlocked() {
+  public playBlocked() {
+    if (!this.soundEnabled) return;
     try {
       const ctx = this.getContext();
       if (!ctx) return;
@@ -80,6 +177,86 @@ class AudioController {
     } catch {
       // Audio playback failed silently
     }
+  }
+
+  // =========================================================================
+  // SCENARIO-BASED VIETNAMESE VOICE ANNOUNCEMENTS
+  // =========================================================================
+
+  /**
+   * Voice prompt when toilet paper is dispensed successfully.
+   */
+  public announceGranted(name?: string | null, isNewUser?: boolean) {
+    this.playGranted();
+    if (!this.voiceEnabled) return;
+
+    if (isNewUser) {
+      this.speak("Chào mừng bạn! Hệ thống đang cấp giấy vệ sinh, xin mời nhận giấy.");
+    } else if (name && !name.startsWith("USER_")) {
+      this.speak(`Xin chào ${name}! Hệ thống đang cấp giấy vệ sinh cho bạn.`);
+    } else {
+      this.speak("Nhận diện thành công! Hệ thống đang cấp giấy vệ sinh, xin mời nhận giấy.");
+    }
+  }
+
+  /**
+   * Voice prompt when blocked by cooldown to prevent waste.
+   */
+  public announceBlocked(secondsRemaining: number) {
+    this.playBlocked();
+    if (!this.voiceEnabled) return;
+
+    const m = Math.floor(secondsRemaining / 60);
+    const s = secondsRemaining % 60;
+
+    if (m > 0) {
+      this.speak(`Bạn vừa mới nhận giấy vệ sinh. Vui lòng chờ thêm ${m} phút nữa trước khi lấy lần tiếp theo.`);
+    } else {
+      this.speak(`Bạn vừa mới nhận giấy vệ sinh. Vui lòng chờ thêm ${s} giây nữa nhé.`);
+    }
+  }
+
+  /**
+   * Voice prompt when a face mask is detected.
+   */
+  public announceMaskDetected() {
+    this.playBlocked();
+    if (!this.voiceEnabled) return;
+    this.speak("Vui lòng tháo khẩu trang để hệ thống nhận diện khuôn mặt.");
+  }
+
+  /**
+   * Voice prompt when hand or object occludes the face.
+   */
+  public announceOcclusion() {
+    this.playBlocked();
+    if (!this.voiceEnabled) return;
+    this.speak("Khuôn mặt đang bị che khuất. Vui lòng bỏ tay hoặc vật cản trước mặt.");
+  }
+
+  /**
+   * Voice prompt when no face is found in frame.
+   */
+  public announceNoFace() {
+    this.playBlocked();
+    if (!this.voiceEnabled) return;
+    this.speak("Không tìm thấy khuôn mặt. Vui lòng đứng đối diện trước camera.");
+  }
+
+  /**
+   * Voice prompt when photo/screen spoof is detected.
+   */
+  public announceSpoofDetected() {
+    this.playBlocked();
+    if (!this.voiceEnabled) return;
+    this.speak("Cảnh báo hình ảnh không hợp lệ. Vui lòng thử lại trực tiếp trước camera.");
+  }
+
+  /**
+   * Test voice playback button in settings.
+   */
+  public testVoice() {
+    this.speak("Xin chào! Đây là thông báo giọng nói tiếng Việt của máy cấp giấy vệ sinh thông minh.");
   }
 }
 
