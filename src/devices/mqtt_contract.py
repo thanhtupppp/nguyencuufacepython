@@ -94,6 +94,20 @@ def make_state(
     return result
 
 
+def make_event(*, request_id: str, event_type: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Build a compact event envelope; callers must not put biometrics in payload."""
+    if not request_id.strip():
+        raise ValueError("request_id is required")
+    if not event_type.strip():
+        raise ValueError("event_type is required")
+    return {
+        "schema_version": 1,
+        "request_id": request_id,
+        "event_type": event_type,
+        "payload": payload or {},
+    }
+
+
 def encode(payload: dict[str, Any]) -> bytes:
     """Serialize a contract payload deterministically for MQTT publishing."""
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
