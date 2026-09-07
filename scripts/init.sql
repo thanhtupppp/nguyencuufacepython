@@ -53,6 +53,21 @@ CREATE TABLE IF NOT EXISTS mqtt_idempotency (
 CREATE INDEX IF NOT EXISTS idx_mqtt_idempotency_expires
 ON mqtt_idempotency (expires_at);
 
+CREATE TABLE IF NOT EXISTS device_sessions (
+    session_id VARCHAR(64) PRIMARY KEY,
+    device_id VARCHAR(64) NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
+    started_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    last_seen_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    sequence BIGINT NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_device_sessions_device
+ON device_sessions (device_id);
+
+CREATE INDEX IF NOT EXISTS idx_device_sessions_last_seen
+ON device_sessions (last_seen_at);
+
 CREATE INDEX IF NOT EXISTS idx_face_embeddings_hnsw
 ON face_embeddings
 USING hnsw (embedding vector_cosine_ops)
