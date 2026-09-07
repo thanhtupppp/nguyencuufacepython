@@ -3,6 +3,7 @@ SCRFD Face Detector module using ONNX Runtime.
 Detects face bounding boxes and 5 facial landmarks (left eye, right eye, nose, left mouth, right mouth).
 """
 
+import hashlib
 import os
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -85,8 +86,10 @@ class SCRFDDetector:
         nms_threshold: float = 0.4,
         input_size: tuple[int, int] = (640, 640),
         providers: Optional[list[str]] = None,
+        expected_sha256: Optional[str] = None,
     ):
         self.model_path = Path(model_path) if model_path else None
+        self.expected_sha256 = expected_sha256
         self.conf_threshold = conf_threshold
         self.nms_threshold = nms_threshold
         self.input_size = input_size
@@ -110,7 +113,22 @@ class SCRFDDetector:
         self.use_kps = True
 
         if self.model_path and self.model_path.exists():
+            if self.expected_sha256:
+                self._verify_sha256(self.model_path, self.expected_sha256)
             self._load_model()
+
+    @staticmethod
+    def _verify_sha256(path: Path, expected: str) -> None:
+        """Verifies SCRFD model file checksum against expected SHA-256 hash."""
+        digest = hashlib.sha256()
+        with path.open("rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                digest.update(chunk)
+        actual = digest.hexdigest()
+        if actual.lower() != expected.lower():
+            raise ValueError(
+                f"Model SHA-256 fingerprint mismatch for {path}: expected {expected}, got {actual}"
+            )
 
     def _load_model(self) -> None:
         if ort is None:

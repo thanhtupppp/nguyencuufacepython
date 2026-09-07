@@ -1,21 +1,41 @@
-"""Face enrollment, recognition and verification endpoints."""
-
 from typing import Optional
 
 import numpy as np
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
-from src.api.dependencies import db, recognition_pipeline
+from src.api.dependencies import db, recognition_pipeline, verify_api_key
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(verify_api_key)])
+
+MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+def _validate_image_bytes(data: bytes) -> None:
+    """Validates raw image bytes for maximum size and authentic MIME magic bytes."""
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Payload too large. Maximum image size is {MAX_IMAGE_BYTES // (1024 * 1024)}MB.",
+        )
+
+    is_jpeg = data.startswith(b"\xff\xd8\xff")
+    is_png = data.startswith(b"\x89PNG\r\n\x1a\n")
+    is_webp = data.startswith(b"RIFF") and len(data) >= 12 and data[8:12] == b"WEBP"
+
+    if not (is_jpeg or is_png or is_webp):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid image format. Allowed formats: JPEG, PNG, WEBP.",
+        )
 
 
 def _decode_image(data: bytes) -> np.ndarray:
     import cv2
 
+    _validate_image_bytes(data)
     image = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
     if image is None:
-        raise HTTPException(status_code=400, detail="Invalid image upload")
+        raise HTTPException(status_code=400, detail="Invalid image upload: failed to decode image")
     return image
 
 

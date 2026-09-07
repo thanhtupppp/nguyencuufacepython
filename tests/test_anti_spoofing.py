@@ -10,6 +10,7 @@ from src.anti_spoofing.liveness import (
     crop_face_with_scale,
     compute_fourier_frequency_score,
     LivenessResult,
+    LivenessDecision,
 )
 
 
@@ -62,3 +63,47 @@ def test_anti_spoof_detector_heuristic_mode():
     assert isinstance(res, LivenessResult)
     assert 0.0 <= res.liveness_score <= 1.0
     assert "fourier_heuristic" in res.scale_scores
+    assert res.decision in {LivenessDecision.PASS, LivenessDecision.FAIL}
+
+
+def test_anti_spoof_inconclusive_face_too_small():
+    """Verify face bbox below min_face_size returns INCONCLUSIVE."""
+    detector = AntiSpoofDetector(model_path=None, min_face_size=60)
+    img = np.zeros((100, 100, 3), dtype=np.uint8)
+    # 40x40 bbox is < 60
+    bbox = [10.0, 10.0, 50.0, 50.0]
+    res = detector.predict_liveness(img, bbox)
+    assert res.decision == LivenessDecision.INCONCLUSIVE
+    assert res.reason == "FACE_TOO_SMALL"
+    assert res.is_live is False
+
+
+def test_anti_spoof_inconclusive_extreme_illumination():
+    """Verify too dark or washed out face returns INCONCLUSIVE."""
+    detector = AntiSpoofDetector(model_path=None)
+    # Very dark image (mean brightness < 25)
+    dark_img = np.full((150, 150, 3), 10, dtype=np.uint8)
+    bbox = [20.0, 20.0, 120.0, 120.0]
+    res_dark = detector.predict_liveness(dark_img, bbox)
+    assert res_dark.decision == LivenessDecision.INCONCLUSIVE
+    assert res_dark.reason == "EXTREME_ILLUMINATION"
+    assert res_dark.is_live is False
+
+    # Very bright / washed out image (mean brightness > 235)
+    bright_img = np.full((150, 150, 3), 245, dtype=np.uint8)
+    res_bright = detector.predict_liveness(bright_img, bbox)
+    assert res_bright.decision == LivenessDecision.INCONCLUSIVE
+    assert res_bright.reason == "EXTREME_ILLUMINATION"
+    assert res_bright.is_live is False
+
+
+def test_anti_spoof_strict_mode_when_weights_missing():
+    """Verify strict_mode=True rejects with INCONCLUSIVE if ONNX weights are missing."""
+    detector = AntiSpoofDetector(model_path=None, strict_mode=True)
+    img = np.full((150, 150, 3), 128, dtype=np.uint8)
+    bbox = [20.0, 20.0, 120.0, 120.0]
+    res = detector.predict_liveness(img, bbox)
+    assert res.decision == LivenessDecision.INCONCLUSIVE
+    assert res.reason == "MODEL_WEIGHTS_MISSING"
+    assert res.is_live is False
+

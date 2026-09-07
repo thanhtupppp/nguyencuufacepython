@@ -59,3 +59,50 @@ def test_recognition_model_hook_fails_closed() -> None:
         files={"image": ("face.jpg", b"not-an-image", "image/jpeg")},
     )
     assert response.status_code == 400
+
+
+def test_person_status_patch() -> None:
+    client.post("/api/v1/persons", json={"person_id": "p002", "name": "Bob"})
+    
+    patch_res = client.patch("/api/v1/persons/p002/status", json={"status": "inactive"})
+    assert patch_res.status_code == 200
+    assert patch_res.json()["status"] == "inactive"
+
+    get_res = client.get("/api/v1/persons/p002")
+    assert get_res.json()["status"] == "inactive"
+
+    # Invalid status value
+    invalid_patch = client.patch("/api/v1/persons/p002/status", json={"status": "invalid_status"})
+    assert invalid_patch.status_code == 422
+
+
+def test_upload_file_size_limit() -> None:
+    # 5MB + 10 bytes payload
+    oversized_jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * (5 * 1024 * 1024 + 10)
+    response = client.post(
+        "/api/v1/faces/recognize",
+        files={"image": ("oversized.jpg", oversized_jpeg, "image/jpeg")},
+    )
+    assert response.status_code == 413
+    assert "Payload too large" in response.json()["detail"]
+
+
+def test_api_key_authentication(monkeypatch) -> None:
+    monkeypatch.setenv("API_KEY", "test-secret-key-123")
+
+    # Missing API Key -> 401
+    unauth = client.get("/api/v1/persons")
+    assert unauth.status_code == 401
+
+    # Wrong API Key -> 401
+    wrong = client.get("/api/v1/persons", headers={"X-API-Key": "wrong-key"})
+    assert wrong.status_code == 401
+
+    # Correct API Key via X-API-Key header -> 200
+    valid_x_key = client.get("/api/v1/persons", headers={"X-API-Key": "test-secret-key-123"})
+    assert valid_x_key.status_code == 200
+
+    # Correct API Key via Authorization: Bearer -> 200
+    valid_bearer = client.get("/api/v1/persons", headers={"Authorization": "Bearer test-secret-key-123"})
+    assert valid_bearer.status_code == 200
+

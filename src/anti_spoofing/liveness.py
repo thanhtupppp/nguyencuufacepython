@@ -11,10 +11,18 @@ from typing import Any, Optional, Union
 import cv2
 import numpy as np
 
+from enum import Enum
+
 try:
     import onnxruntime as ort
 except ImportError:
     ort = None
+
+
+class LivenessDecision(str, Enum):
+    PASS = "PASS"
+    FAIL = "FAIL"
+    INCONCLUSIVE = "INCONCLUSIVE"
 
 
 @dataclass
@@ -23,6 +31,8 @@ class LivenessResult:
     is_live: bool
     liveness_score: float                  # Probability of live human [0.0, 1.0]
     threshold: float                       # Operating decision threshold
+    decision: LivenessDecision = LivenessDecision.PASS
+    reason: Optional[str] = None           # Policy rationale
     attack_type: Optional[str] = None      # 'PRINT_ATTACK', 'SCREEN_REPLAY', or None
     scale_scores: dict[str, float] = field(default_factory=dict)
     fourier_score: float = 1.0             # High-frequency texture consistency score
@@ -98,35 +108,32 @@ def compute_fourier_frequency_score(face_gray: np.ndarray) -> float:
     # Compute 2D Fast Fourier Transform
     f = np.fft.fft2(resized.astype(np.float32))
     fshift = np.fft.fftshift(f)
-    magnitude_spectrum = np.log(np.abs(fshift) + 1.0)
+    magnitude_spectrum = 20 * np.log(np.abs(fshift) + 1e-6)
 
-    # Separate low frequencies (center) from high frequencies (outer)
-    cy, cx = 32, 32
+    # Calculate high-frequency energy ratio
+    cy, cx = magnitude_spectrum.shape[0] // 2, magnitude_spectrum.shape[1] // 2
     r_inner = 8
-    y, x = np.ogrid[:64, :64]
-    mask_inner = ((x - cx) ** 2 + (y - cy) ** 2) <= r_inner**2
+    r_outer = 24
 
-    low_freq_energy = np.mean(magnitude_spectrum[mask_inner])
-    high_freq_energy = np.mean(magnitude_spectrum[~mask_inner])
+    y, x = np.ogrid[: magnitude_spectrum.shape[0], : magnitude_spectrum.shape[1]]
+    dist_from_center = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
 
-    if low_freq_energy <= 1e-6:
-        return 0.5
+    mid_high_mask = (dist_from_center >= r_inner) & (dist_from_center <= r_outer)
+    center_mask = dist_from_center < r_inner
 
-    ratio = high_freq_energy / low_freq_energy
-    # Natural human skin typically exhibits a balanced ratio between 0.35 and 0.75
-    if 0.30 <= ratio <= 0.80:
-        return 1.0
-    elif 0.20 <= ratio < 0.30 or 0.80 < ratio <= 0.90:
-        return 0.6
-    else:
-        return 0.2
+    mid_high_energy = np.mean(magnitude_spectrum[mid_high_mask])
+    center_energy = np.mean(magnitude_spectrum[center_mask]) + 1e-6
+
+    # Normalized natural ratio: real skin has smooth spectral roll-off
+    ratio = mid_high_energy / center_energy
+    score = np.clip(1.0 - abs(ratio - 0.45) * 2.0, 0.0, 1.0)
+    return float(score)
 
 
 class AntiSpoofDetector:
     """
-    MiniFASNet Liveness Detector running on ONNX Runtime.
-    Evaluates faces on multiple scales (e.g. 1.0x and 2.7x) to capture both
-    micro-skin reflections and macro-environment context (screen borders, paper edges).
+    Production Anti-Spoofing engine with 3-state decision policy (PASS / FAIL / INCONCLUSIVE).
+    Combines Silent-Face MiniFASNet multi-scale models with 2D Fourier texture checks.
     """
 
     def __init__(
@@ -135,10 +142,18 @@ class AntiSpoofDetector:
         threshold: float = 0.85,
         scales: list[float] = [1.0, 2.7],
         providers: Optional[list[str]] = None,
+        strict_mode: bool = False,
+        min_face_size: int = 60,
+        min_brightness: float = 25.0,
+        max_brightness: float = 235.0,
     ):
         self.model_path = Path(model_path) if model_path else None
         self.threshold = threshold
         self.scales = scales
+        self.strict_mode = strict_mode
+        self.min_face_size = min_face_size
+        self.min_brightness = min_brightness
+        self.max_brightness = max_brightness
         self.session: Any = None
 
         if providers is None:
@@ -174,7 +189,6 @@ class AntiSpoofDetector:
 
     def _preprocess_crop(self, crop: np.ndarray) -> np.ndarray:
         """Prepares crop for MiniFASNet input (NCHW float32)."""
-        # Normalization: typically (crop - mean) / std or crop / 255.0
         blob = crop.astype(np.float32)
         blob = np.transpose(blob, (2, 0, 1))  # (3, 80, 80)
         blob = np.expand_dims(blob, axis=0)    # (1, 3, 80, 80)
@@ -186,18 +200,51 @@ class AntiSpoofDetector:
         bbox: list[float] | np.ndarray,
     ) -> LivenessResult:
         """
-        Determines whether the face in bbox is a real live person or a spoof attack.
+        Determines whether the face in bbox is a real live person or a spoof attack
+        following strict fail-closed 3-state policy: PASS, FAIL, INCONCLUSIVE.
         """
         x1, y1, x2, y2 = [int(v) for v in bbox]
+        w_box = max(0, x2 - x1)
+        h_box = max(0, y2 - y1)
         h_img, w_img = image.shape[:2]
-        crop_tight = image[max(0, y1):min(h_img, y2), max(0, x1):min(w_img, x2)]
 
-        # 1. Fourier texture analysis
+        # Precondition 1: Face resolution check
+        if w_box < self.min_face_size or h_box < self.min_face_size:
+            return LivenessResult(
+                is_live=False,
+                liveness_score=0.0,
+                threshold=self.threshold,
+                decision=LivenessDecision.INCONCLUSIVE,
+                reason="FACE_TOO_SMALL",
+            )
+
+        crop_tight = image[max(0, y1):min(h_img, y2), max(0, x1):min(w_img, x2)]
+        if crop_tight.size == 0:
+            return LivenessResult(
+                is_live=False,
+                liveness_score=0.0,
+                threshold=self.threshold,
+                decision=LivenessDecision.INCONCLUSIVE,
+                reason="INVALID_CROP",
+            )
+
+        # Precondition 2: Illumination check
         gray_tight = (
             cv2.cvtColor(crop_tight, cv2.COLOR_BGR2GRAY)
-            if crop_tight.ndim == 3 and crop_tight.size > 0
+            if crop_tight.ndim == 3
             else crop_tight
         )
+        mean_brightness = float(np.mean(gray_tight))
+        if mean_brightness < self.min_brightness or mean_brightness > self.max_brightness:
+            return LivenessResult(
+                is_live=False,
+                liveness_score=0.0,
+                threshold=self.threshold,
+                decision=LivenessDecision.INCONCLUSIVE,
+                reason="EXTREME_ILLUMINATION",
+            )
+
+        # 1. Fourier texture analysis
         fourier_score = compute_fourier_frequency_score(gray_tight)
 
         # 2. Deep learning multi-scale inference
@@ -207,34 +254,56 @@ class AntiSpoofDetector:
                 scaled_crop = crop_face_with_scale(image, bbox, scale=scale, output_size=(80, 80))
                 tensor = self._preprocess_crop(scaled_crop)
                 raw_out = self.session.run([self.output_name], {self.input_name: tensor})[0]
-                # Apply softmax over class logits
                 exp_scores = np.exp(raw_out - np.max(raw_out, axis=1, keepdims=True))
                 probs = exp_scores / np.sum(exp_scores, axis=1, keepdims=True)
-                # Class 1 is live probability
                 live_prob = float(probs[0, 1]) if probs.shape[1] > 1 else float(probs[0, 0])
                 scale_scores[f"scale_{scale:.1f}"] = live_prob
 
             overall_liveness = float(np.mean(list(scale_scores.values())))
+            if overall_liveness >= self.threshold:
+                decision = LivenessDecision.PASS
+                is_live = True
+                attack_type = None
+            else:
+                decision = LivenessDecision.FAIL
+                is_live = False
+                attack_type = "SCREEN_REPLAY_MOIRE" if fourier_score < 0.5 else "PRINT_ATTACK"
         else:
-            # Heuristic fallback if deep learning weights are not yet mounted
+            # Model weights not loaded
+            if self.strict_mode:
+                return LivenessResult(
+                    is_live=False,
+                    liveness_score=fourier_score,
+                    threshold=self.threshold,
+                    decision=LivenessDecision.INCONCLUSIVE,
+                    reason="MODEL_WEIGHTS_MISSING",
+                    scale_scores={"fourier_heuristic": fourier_score},
+                    fourier_score=fourier_score,
+                )
+
+            # Non-strict fallback heuristic
             overall_liveness = fourier_score
             scale_scores = {"fourier_heuristic": fourier_score}
-
-        is_live = overall_liveness >= self.threshold
-
-        attack_type = None
-        if not is_live:
-            # Classify attack type based on frequency & scale disparity
-            if fourier_score < 0.5:
+            if overall_liveness >= self.threshold:
+                decision = LivenessDecision.PASS
+                is_live = True
+                attack_type = None
+            elif overall_liveness <= 0.40:
+                decision = LivenessDecision.FAIL
+                is_live = False
                 attack_type = "SCREEN_REPLAY_MOIRE"
             else:
-                attack_type = "PRINT_ATTACK"
+                decision = LivenessDecision.INCONCLUSIVE
+                is_live = False
+                attack_type = None
 
         return LivenessResult(
             is_live=is_live,
             liveness_score=overall_liveness,
             threshold=self.threshold,
+            decision=decision,
             attack_type=attack_type,
             scale_scores=scale_scores,
             fourier_score=fourier_score,
+            reason="LIVENESS_CONFIRMED" if is_live else (attack_type or "LIVENESS_FAILED"),
         )

@@ -3,6 +3,7 @@ ArcFace recognition module using ONNX Runtime.
 Outputs 512-dimensional L2-normalized feature vectors.
 """
 
+import hashlib
 import os
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -29,11 +30,13 @@ class ArcFaceRecognizer(BaseFaceRecognizer):
         model_name: str = "arcface_r50",
         model_version: str = "arcface_v1",
         providers: Optional[list[str]] = None,
+        expected_sha256: Optional[str] = None,
     ):
         self._model_name = model_name
         self._model_version = model_version
         self._embedding_dim = 512
         self.model_path = Path(model_path) if model_path else None
+        self.expected_sha256 = expected_sha256
         self.session: Any = None
 
         if providers is None:
@@ -50,10 +53,25 @@ class ArcFaceRecognizer(BaseFaceRecognizer):
             self.providers = providers
 
         if self.model_path and self.model_path.exists():
+            if self.expected_sha256:
+                self._verify_sha256(self.model_path, self.expected_sha256)
             self._load_model()
 
+    @staticmethod
+    def _verify_sha256(path: Path, expected: str) -> None:
+        """Verifies model file checksum against expected SHA-256 hash."""
+        digest = hashlib.sha256()
+        with path.open("rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                digest.update(chunk)
+        actual = digest.hexdigest()
+        if actual.lower() != expected.lower():
+            raise ValueError(
+                f"Model SHA-256 fingerprint mismatch for {path}: expected {expected}, got {actual}"
+            )
+
     def _load_model(self) -> None:
-        """Initializes ONNX Runtime session."""
+        """Initializes ONNX Runtime session and validates tensor contracts."""
         if ort is None:
             raise ImportError("onnxruntime is required to run ArcFaceRecognizer")
 
@@ -67,8 +85,16 @@ class ArcFaceRecognizer(BaseFaceRecognizer):
         )
         self.input_name = self.session.get_inputs()[0].name
         self.output_name = self.session.get_outputs()[0].name
-        input_shape = self.session.get_inputs()[0].shape
-        # Input shape typically [batch, 3, 112, 112]
+
+        # Validate input & output tensor shape contracts
+        in_shape = self.session.get_inputs()[0].shape
+        if len(in_shape) == 4 and in_shape[2] != -1 and (in_shape[2], in_shape[3]) != (112, 112):
+            raise ValueError(f"Expected 112x112 input tensor, got {in_shape}")
+
+        out_shape = self.session.get_outputs()[0].shape
+        if len(out_shape) == 2 and out_shape[1] != -1 and out_shape[1] != self._embedding_dim:
+            raise ValueError(f"Expected {self._embedding_dim}-D output embedding, got {out_shape}")
+
         self.input_size = (112, 112)
 
     @property

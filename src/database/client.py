@@ -89,7 +89,9 @@ class DatabaseClient:
             department TEXT DEFAULT 'default',
             role TEXT DEFAULT 'user',
             metadata TEXT DEFAULT '{}',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            status TEXT DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS face_embeddings (
@@ -117,7 +119,7 @@ class DatabaseClient:
 
         # Load existing persons into cache
         cur = self._sqlite_conn.cursor()
-        cur.execute("SELECT person_id, name, department, role, metadata FROM persons;")
+        cur.execute("SELECT person_id, name, department, role, metadata, status FROM persons;")
         for row in cur.fetchall():
             meta = json.loads(row[4]) if row[4] else {}
             self._mem_persons[row[0]] = {
@@ -126,6 +128,7 @@ class DatabaseClient:
                 "department": row[2],
                 "role": row[3],
                 "metadata": meta,
+                "status": row[5] if len(row) > 5 and row[5] else "active",
             }
 
         # Load existing embeddings into cache
@@ -193,6 +196,7 @@ class DatabaseClient:
         department: str = "default",
         role: str = "user",
         metadata: Optional[dict[str, Any]] = None,
+        status: str = "active",
     ) -> dict[str, Any]:
         """Registers a new individual identity."""
         metadata = metadata or {}
@@ -201,15 +205,17 @@ class DatabaseClient:
             with self._sqlite_conn:
                 self._sqlite_conn.execute(
                     """
-                    INSERT INTO persons (person_id, name, department, role, metadata)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO persons (person_id, name, department, role, metadata, status)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT (person_id) DO UPDATE SET
                         name = excluded.name,
                         department = excluded.department,
                         role = excluded.role,
-                        metadata = excluded.metadata;
+                        metadata = excluded.metadata,
+                        status = excluded.status,
+                        updated_at = CURRENT_TIMESTAMP;
                     """,
-                    (person_id, name, department, role, json.dumps(metadata)),
+                    (person_id, name, department, role, json.dumps(metadata), status),
                 )
             record = {
                 "person_id": person_id,
@@ -217,6 +223,7 @@ class DatabaseClient:
                 "department": department,
                 "role": role,
                 "metadata": metadata,
+                "status": status,
             }
             self._mem_persons[person_id] = record
             return record
@@ -228,19 +235,21 @@ class DatabaseClient:
                 "department": department,
                 "role": role,
                 "metadata": metadata,
+                "status": status,
             }
             self._mem_persons[person_id] = record
             return record
 
         sql = """
-        INSERT INTO persons (person_id, name, department, role, metadata)
-        VALUES (%s, %s, %s, %s, %s)
+        INSERT INTO persons (person_id, name, department, role, metadata, status)
+        VALUES (%s, %s, %s, %s, %s, %s)
         ON CONFLICT (person_id) DO UPDATE 
-        SET name = EXCLUDED.name, department = EXCLUDED.department, role = EXCLUDED.role, metadata = EXCLUDED.metadata
-        RETURNING person_id, name, department, role, metadata;
+        SET name = EXCLUDED.name, department = EXCLUDED.department, role = EXCLUDED.role,
+            metadata = EXCLUDED.metadata, status = EXCLUDED.status, updated_at = CURRENT_TIMESTAMP
+        RETURNING person_id, name, department, role, metadata, status;
         """
         with self._conn.cursor() as cur:
-            cur.execute(sql, (person_id, name, department, role, json.dumps(metadata)))
+            cur.execute(sql, (person_id, name, department, role, json.dumps(metadata), status))
             row = cur.fetchone()
             return {
                 "person_id": row[0],
@@ -248,7 +257,44 @@ class DatabaseClient:
                 "department": row[2],
                 "role": row[3],
                 "metadata": row[4],
+                "status": row[5] if len(row) > 5 else status,
             }
+
+    def update_person_status(self, person_id: str, status: str) -> bool:
+        """Updates lifecycle status ('active', 'inactive', 'suspended') of an individual."""
+        if self.use_sqlite and self._sqlite_conn:
+            with self._sqlite_conn:
+                cur = self._sqlite_conn.execute(
+                    "UPDATE persons SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE person_id = ?;",
+                    (status, person_id),
+                )
+                if cur.rowcount > 0:
+                    if person_id in self._mem_persons:
+                        self._mem_persons[person_id]["status"] = status
+                    return True
+            return False
+
+        if self.use_memory:
+            if person_id in self._mem_persons:
+                self._mem_persons[person_id]["status"] = status
+                return True
+            return False
+
+        with self._conn.cursor() as cur:
+            cur.execute(
+                "UPDATE persons SET status = %s, updated_at = CURRENT_TIMESTAMP WHERE person_id = %s;",
+                (status, person_id),
+            )
+            self._conn.commit()
+            return cur.rowcount > 0
+
+    def deactivate_person(self, person_id: str) -> bool:
+        """Soft-deactivates an enrolled person so vector search will ignore them."""
+        return self.update_person_status(person_id, "inactive")
+
+    def activate_person(self, person_id: str) -> bool:
+        """Re-activates a person for recognition."""
+        return self.update_person_status(person_id, "active")
 
     def get_person(self, person_id: str) -> Optional[dict[str, Any]]:
         """Fetches person info by person_id."""
@@ -371,6 +417,7 @@ class DatabaseClient:
         query_vector: np.ndarray,
         model_version: str = "arcface_v1",
         top_k: int = 2,
+        active_only: bool = True,
     ) -> list[SearchCandidate]:
         """
         Performs vector similarity search.
@@ -385,9 +432,12 @@ class DatabaseClient:
             matches = []
             for item in self._mem_embeddings:
                 if item["model_version"] == model_version:
-                    sim = float(np.dot(q, item["embedding"]))
                     pid = item["person_id"]
-                    p_name = self._mem_persons.get(pid, {}).get("name", pid)
+                    person_info = self._mem_persons.get(pid, {})
+                    if active_only and person_info.get("status", "active") != "active":
+                        continue
+                    sim = float(np.dot(q, item["embedding"]))
+                    p_name = person_info.get("name", pid)
                     matches.append(SearchCandidate(person_id=pid, similarity=sim, name=p_name))
 
             # Sort descending by similarity
@@ -404,14 +454,15 @@ class DatabaseClient:
             return unique_candidates
 
         # PostgreSQL HNSW vector search
-        sql = """
+        status_filter = "AND p.status = 'active'" if active_only else ""
+        sql = f"""
         SELECT 
             e.person_id,
             1.0 - (e.embedding <=> %s::vector) AS similarity,
             p.name
         FROM face_embeddings e
         LEFT JOIN persons p ON e.person_id = p.person_id
-        WHERE e.model_version = %s
+        WHERE e.model_version = %s {status_filter}
         ORDER BY e.embedding <=> %s::vector ASC
         LIMIT %s;
         """
@@ -431,18 +482,24 @@ class DatabaseClient:
 
         return candidates
 
+    # Alias for search_top_k
+    search_candidates = search_top_k
+
     def recognize_with_margin(
         self,
         query_vector: np.ndarray,
         model_version: str = "arcface_v1",
         threshold: float = 0.60,
         margin: float = 0.08,
+        active_only: bool = True,
     ) -> RecognitionDecision:
         """
         Executes Dual-Threshold anti-false-match decision:
         Match if: Top1 >= threshold AND (Top1 - Top2) >= margin.
         """
-        candidates = self.search_top_k(query_vector, model_version=model_version, top_k=2)
+        candidates = self.search_top_k(
+            query_vector, model_version=model_version, top_k=2, active_only=active_only
+        )
 
         if not candidates:
             return RecognitionDecision(

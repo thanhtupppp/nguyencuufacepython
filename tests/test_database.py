@@ -136,3 +136,45 @@ def test_sqlite_persistence(tmp_path):
     assert len(client2.search_top_k(query, top_k=1)) == 0
     client2.close()
 
+
+def test_person_status_and_active_scoping(db_client):
+    """Verify person status scoping and active_only filter for vector searches."""
+    db_client.create_person("emp_active", "Active User")
+    db_client.create_person("emp_resigned", "Resigned User")
+
+    vec_a = np.zeros(512, dtype=np.float32)
+    vec_a[0] = 1.0
+    vec_b = np.zeros(512, dtype=np.float32)
+    vec_b[1] = 1.0
+
+    db_client.add_embedding("emp_active", vec_a, model_version="arcface_v1")
+    db_client.add_embedding("emp_resigned", vec_b, model_version="arcface_v1")
+
+    # Deactivate emp_resigned
+    res = db_client.deactivate_person("emp_resigned")
+    assert res is True
+
+    resigned_data = db_client.get_person("emp_resigned")
+    assert resigned_data["status"] == "inactive"
+
+    # Query matching emp_resigned
+    query_b = vec_b.copy()
+
+    # With active_only=True, emp_resigned MUST NOT be returned
+    candidates_active = db_client.search_top_k(query_b, active_only=True)
+    assert not any(c.person_id == "emp_resigned" for c in candidates_active)
+
+    decision_active = db_client.recognize_with_margin(query_b, active_only=True)
+    assert decision_active.person_id != "emp_resigned"
+
+    # With active_only=False, emp_resigned is returned
+    candidates_all = db_client.search_top_k(query_b, active_only=False)
+    assert any(c.person_id == "emp_resigned" for c in candidates_all)
+    assert candidates_all[0].person_id == "emp_resigned"
+
+    # Reactivate emp_resigned
+    db_client.activate_person("emp_resigned")
+    candidates_after_reactivate = db_client.search_top_k(query_b, active_only=True)
+    assert candidates_after_reactivate[0].person_id == "emp_resigned"
+
+

@@ -1,11 +1,11 @@
 """Person identity CRUD endpoints."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from src.api.dependencies import db
+from src.api.dependencies import db, verify_api_key
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(verify_api_key)])
 
 
 class PersonCreate(BaseModel):
@@ -14,6 +14,11 @@ class PersonCreate(BaseModel):
     department: str = "default"
     role: str = "user"
     metadata: dict = Field(default_factory=dict)
+    status: str = "active"
+
+
+class PersonStatusUpdate(BaseModel):
+    status: str = Field(pattern="^(active|inactive|suspended)$")
 
 
 @router.post("", status_code=201)
@@ -24,6 +29,7 @@ def create_person(payload: PersonCreate) -> dict:
         department=payload.department,
         role=payload.role,
         metadata=payload.metadata,
+        status=payload.status,
     )
 
 
@@ -38,6 +44,18 @@ def get_person(person_id: str) -> dict:
     if person is None:
         raise HTTPException(status_code=404, detail="person_id not found")
     return person
+
+
+@router.patch("/{person_id}/status")
+def update_person_status_endpoint(person_id: str, payload: PersonStatusUpdate) -> dict:
+    if not db.update_person_status(person_id, payload.status):
+        raise HTTPException(status_code=404, detail="person_id not found")
+    person = db.get_person(person_id)
+    return {
+        "person_id": person_id,
+        "status": payload.status,
+        "name": person.get("name") if person else None,
+    }
 
 
 @router.delete("/{person_id}", status_code=204)

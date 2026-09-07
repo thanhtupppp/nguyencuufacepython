@@ -1,4 +1,9 @@
-"""Shared service dependencies for API routes."""
+import os
+import secrets
+from typing import Optional
+
+from fastapi import HTTPException, Security, status
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from src.database.client import DatabaseClient
 from src.api.recognition_runtime import build_recognition_pipeline
@@ -14,3 +19,29 @@ try:
     recognition_pipeline = build_recognition_pipeline()
 except (RuntimeError, FileNotFoundError, ValueError):
     recognition_pipeline = None
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def verify_api_key(
+    header_key: Optional[str] = Security(api_key_header),
+    bearer: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
+) -> bool:
+    """Verifies API Key from X-API-Key header or Authorization: Bearer.
+
+    If API_KEY is configured in the environment, requests must provide matching
+    credentials. If unconfigured (development mode), requests pass through.
+    """
+    expected_key = os.getenv("API_KEY", "").strip()
+    if not expected_key:
+        return True
+
+    provided_key = header_key or (bearer.credentials if bearer else None)
+    if not provided_key or not secrets.compare_digest(provided_key, expected_key):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return True
