@@ -70,3 +70,30 @@ def test_quality_gate_rejects_extreme_yaw():
     res = gate.assess_quality(img, [10, 10, 140, 140], extreme_yaw_lmk)
     assert res.is_valid is False
     assert any("EXTREME_YAW" in r for r in res.rejection_reasons)
+
+
+def test_quality_gate_rejects_mask():
+    """FaceQualityGate should flag face wearing a blue surgical mask."""
+    gate = FaceQualityGate(min_face_size=50, blur_threshold=10.0, check_occlusion=True)
+
+    img = np.zeros((150, 150, 3), dtype=np.uint8)
+    # Upper half skin tone (BGR)
+    img[10:75, 10:140] = [120, 150, 210]
+    # Lower half surgical blue (BGR)
+    img[75:140, 10:140] = [210, 160, 60]
+
+    bbox = [10, 10, 140, 140]
+    landmarks = np.array([
+        [45.0, 50.0],
+        [105.0, 50.0],
+        [75.0, 75.0],
+        [50.0, 110.0],
+        [100.0, 110.0],
+    ], dtype=np.float32)
+
+    res = gate.assess_quality(img, bbox, landmarks)
+    assert res.is_valid is False
+    assert any("MASK_DETECTED" in r for r in res.rejection_reasons)
+    assert res.occlusion is not None
+    assert res.occlusion.is_occluded is True
+

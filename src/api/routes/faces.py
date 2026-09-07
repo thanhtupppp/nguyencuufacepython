@@ -50,8 +50,13 @@ def _extract_embedding(image: np.ndarray) -> tuple[np.ndarray, str, float]:
         result = recognition_pipeline.extract_best_face(image)
     except ValueError as exc:
         code = str(exc)
-        status = 422 if code in {"NO_FACE_DETECTED", "NO_FACE_PASSED_QUALITY_GATE"} else 503
-        raise HTTPException(status_code=status, detail=code) from exc
+        status = 422 if code in {"NO_FACE_DETECTED", "NO_FACE_PASSED_QUALITY_GATE", "MASK_DETECTED", "OCCLUSION_DETECTED"} else 503
+        detail_msg = code
+        if code == "MASK_DETECTED":
+            detail_msg = "Face mask detected. Please remove mask for enrollment or recognition."
+        elif code == "OCCLUSION_DETECTED":
+            detail_msg = "Face is occluded (hands/object). Please uncover your face for enrollment or recognition."
+        raise HTTPException(status_code=status, detail=detail_msg) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail="Recognition runtime unavailable") from exc
     return result.embedding, result.model_version, result.quality_score

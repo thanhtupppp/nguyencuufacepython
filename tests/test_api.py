@@ -51,8 +51,8 @@ def test_enroll_fails_closed_when_model_is_not_configured() -> None:
     assert response.status_code == 400
 
 
-def test_recognition_model_hook_fails_closed() -> None:
-    faces._extract_embedding = lambda image: (_ for _ in ()).throw(Exception("unexpected"))
+def test_recognition_model_hook_fails_closed(monkeypatch) -> None:
+    monkeypatch.setattr(faces, "_extract_embedding", lambda image: (_ for _ in ()).throw(Exception("unexpected")))
     # Invalid input is rejected before the model hook, keeping the HTTP contract deterministic.
     response = client.post(
         "/api/v1/faces/recognize",
@@ -105,4 +105,30 @@ def test_api_key_authentication(monkeypatch) -> None:
     # Correct API Key via Authorization: Bearer -> 200
     valid_bearer = client.get("/api/v1/persons", headers={"Authorization": "Bearer test-secret-key-123"})
     assert valid_bearer.status_code == 200
+
+
+def test_enroll_rejects_mask_occlusion(monkeypatch) -> None:
+    """When pipeline raises MASK_DETECTED, API enroll returns 422 with clear user guidance."""
+    client.post("/api/v1/persons", json={"person_id": "p_mask", "name": "Masked Person"})
+
+    # Mock pipeline to raise MASK_DETECTED
+    class MockPipeline:
+        def extract_best_face(self, image):
+            raise ValueError("MASK_DETECTED")
+
+    monkeypatch.setattr("src.api.dependencies.recognition_pipeline", MockPipeline())
+    monkeypatch.setattr("src.api.routes.faces.recognition_pipeline", MockPipeline())
+
+    import cv2
+
+    _, buf = cv2.imencode(".jpg", np.zeros((100, 100, 3), dtype=np.uint8))
+    valid_jpeg = buf.tobytes()
+    response = client.post(
+        "/api/v1/faces/enroll",
+        data={"person_id": "p_mask"},
+        files={"image": ("face.jpg", valid_jpeg, "image/jpeg")},
+    )
+    assert response.status_code == 422
+    assert "Face mask detected" in response.json()["detail"]
+
 

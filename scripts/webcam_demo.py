@@ -115,10 +115,25 @@ def draw_hud(
             confirmed_sim = tr.confirmed_sim
             confirmed_cons = tr.confirmed_consensus
 
+        # Check if current face is occluded or masked (highest priority override)
+        is_occluded = False
+        occlusion_label = None
+        if latest_item and not latest_item.is_valid_quality:
+            reasons_all = " ".join(latest_item.rejection_reasons)
+            if "MASK_DETECTED" in reasons_all:
+                is_occluded = True
+                occlusion_label = f"Track #{tid} [KHAU TRANG - Thao khau trang]"
+            elif "OCCLUDED_FACE" in reasons_all:
+                is_occluded = True
+                occlusion_label = f"Track #{tid} [CHE MAT - Bo tay che mat]"
+
         color = (0, 165, 255)  # Orange default (pending)
         label = f"Track #{tid} [Pending...]"
 
-        if is_confirmed and confirmed_name:
+        if is_occluded and occlusion_label:
+            color = (255, 0, 255)  # Bright Magenta for occlusion/mask alert
+            label = occlusion_label
+        elif is_confirmed and confirmed_name:
             color = (0, 255, 0)  # Solid Green for confirmed match
             label = f"{confirmed_name} (Sim: {confirmed_sim:.2f}, Consensus: {confirmed_cons*100:.0f}%)"
         elif latest_item and not latest_item.is_valid_quality:
@@ -322,7 +337,19 @@ def run_webcam(
                         item.predicted_id = spoof_res.reason or "INCONCLUSIVE"
                     item.similarity = spoof_res.liveness_score
             else:
-                item.predicted_id = "LOW_QUALITY"
+                reasons_all = " ".join(q_res.rejection_reasons)
+                if "MASK_DETECTED" in reasons_all:
+                    item.predicted_id = "MASK_DETECTED"
+                    toast_text = "[CHÚ Ý] Phát hiện khẩu trang - Vui lòng tháo khẩu trang!"
+                    toast_color = (255, 0, 255)
+                    toast_expiry = time.time() + 1.2
+                elif "OCCLUDED_FACE" in reasons_all:
+                    item.predicted_id = "OCCLUDED_FACE"
+                    toast_text = "[CHÚ Ý] Phát hiện tay che mặt - Vui lòng bỏ tay che mặt!"
+                    toast_color = (255, 0, 255)
+                    toast_expiry = time.time() + 1.2
+                else:
+                    item.predicted_id = "LOW_QUALITY"
 
             detection_items.append(item)
 

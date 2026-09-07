@@ -49,6 +49,7 @@ class RecognitionPipeline:
         # confidence among valid quality candidates. Multi-face workflows should
         # call detect() and process each detection explicitly.
         candidates = []
+        last_rejections = []
         for detection in detections:
             landmarks = detection.get("landmarks")
             if landmarks is None:
@@ -58,8 +59,14 @@ class RecognitionPipeline:
             )
             if quality.is_valid:
                 candidates.append((float(detection["score"]), detection, quality))
+            else:
+                last_rejections.extend(getattr(quality, "rejection_reasons", []))
 
         if not candidates:
+            if any("MASK_DETECTED" in r for r in last_rejections):
+                raise ValueError("MASK_DETECTED")
+            if any("OCCLUDED_FACE" in r for r in last_rejections):
+                raise ValueError("OCCLUSION_DETECTED")
             raise ValueError("NO_FACE_PASSED_QUALITY_GATE")
 
         _, detection, quality = max(candidates, key=lambda item: item[0])

@@ -9,6 +9,8 @@ from typing import Any, Optional, Sequence, Union
 import cv2
 import numpy as np
 
+from .occlusion import OcclusionDetector, OcclusionResult, OcclusionType
+
 
 @dataclass
 class QualityAssessmentResult:
@@ -20,6 +22,8 @@ class QualityAssessmentResult:
     face_size: tuple[int, int] = (0, 0) # (width, height)
     brightness: float = 0.0             # Mean pixel intensity
     estimated_pose: dict[str, float] = field(default_factory=lambda: {"yaw": 0.0, "pitch": 0.0, "roll": 0.0})
+    occlusion: Optional[OcclusionResult] = None
+
 
 
 class FaceQualityGate:
@@ -41,6 +45,8 @@ class FaceQualityGate:
         max_roll: float = 30.0,
         min_brightness: float = 30.0,
         max_brightness: float = 230.0,
+        check_occlusion: bool = True,
+        occlusion_detector: Optional[OcclusionDetector] = None,
     ):
         self.min_face_size = min_face_size
         self.optimal_face_size = optimal_face_size
@@ -50,6 +56,8 @@ class FaceQualityGate:
         self.max_roll = max_roll
         self.min_brightness = min_brightness
         self.max_brightness = max_brightness
+        self.check_occlusion = check_occlusion
+        self.occlusion_detector = occlusion_detector or (OcclusionDetector() if check_occlusion else None)
 
     def estimate_head_pose_from_landmarks(self, landmarks: np.ndarray) -> dict[str, float]:
         """
@@ -162,11 +170,23 @@ class FaceQualityGate:
             if abs(pose["roll"]) > self.max_roll:
                 rejection_reasons.append(f"EXTREME_ROLL (|roll| {abs(pose['roll']):.1f}° > {self.max_roll}°)")
 
+        # 5. Occlusion & Mask Check
+        occlusion_res: Optional[OcclusionResult] = None
+        if self.check_occlusion and self.occlusion_detector is not None:
+            occlusion_res = self.occlusion_detector.detect_occlusion(image, bbox, landmarks)
+            if occlusion_res.is_occluded:
+                if occlusion_res.occlusion_type == OcclusionType.MASK:
+                    rejection_reasons.append(f"MASK_DETECTED ({occlusion_res.reason})")
+                else:
+                    rejection_reasons.append(f"OCCLUDED_FACE ({occlusion_res.reason})")
+
         # Compute overall quality score [0.0, 1.0]
         size_score = min(1.0, min(face_w, face_h) / float(self.optimal_face_size))
         blur_factor = min(1.0, blur_score / max(self.blur_threshold * 2.0, 1.0))
         pose_penalty = 1.0 - min(1.0, (abs(pose["yaw"]) + abs(pose["pitch"])) / 90.0)
         overall_score = float(np.clip(0.4 * blur_factor + 0.3 * size_score + 0.3 * pose_penalty, 0.0, 1.0))
+        if occlusion_res is not None and occlusion_res.is_occluded:
+            overall_score = 0.0
 
         is_valid = len(rejection_reasons) == 0
 
@@ -178,4 +198,5 @@ class FaceQualityGate:
             face_size=(face_w, face_h),
             brightness=mean_brightness,
             estimated_pose=pose,
+            occlusion=occlusion_res,
         )
