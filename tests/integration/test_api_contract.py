@@ -1,9 +1,8 @@
-import io
-
 import numpy as np
 from fastapi.testclient import TestClient
 
-from src.api import dependencies
+from src.api import routes
+from src.api.routes import faces
 from src.api.main import create_app
 
 
@@ -59,7 +58,6 @@ class FakeDB:
 
 
 def _jpeg_bytes():
-    # Minimal valid JPEG accepted by cv2; generated deterministically.
     import cv2
 
     image = np.full((16, 16, 3), 127, dtype=np.uint8)
@@ -68,9 +66,10 @@ def _jpeg_bytes():
     return encoded.tobytes()
 
 
-def _client(monkeypatch):
-    monkeypatch.setattr(dependencies, "db", FakeDB())
-    monkeypatch.setattr(dependencies, "recognition_pipeline", FakePipeline())
+def _client(monkeypatch, pipeline=True):
+    fake_db = FakeDB()
+    monkeypatch.setattr(faces, "db", fake_db)
+    monkeypatch.setattr(faces, "recognition_pipeline", FakePipeline() if pipeline else None)
     return TestClient(create_app())
 
 
@@ -113,9 +112,7 @@ def test_model_version_mismatch_is_rejected(monkeypatch):
 
 
 def test_recognition_fails_closed_without_pipeline(monkeypatch):
-    monkeypatch.setattr(dependencies, "db", FakeDB())
-    monkeypatch.setattr(dependencies, "recognition_pipeline", None)
-    client = TestClient(create_app())
+    client = _client(monkeypatch, pipeline=False)
     response = client.post(
         "/api/v1/faces/recognize",
         files={"image": ("face.jpg", _jpeg_bytes(), "image/jpeg")},
