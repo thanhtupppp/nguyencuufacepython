@@ -53,6 +53,7 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 - [x] Added the import-boundary guard to the CI workflow.
 - [ ] Observe a successful CI run proving the import guard passes.
 - [ ] Benchmark person-level pgvector recall under filtering (issue #3).
+- [ ] Benchmark candidate-first HNSW vs one-vector-per-person prototype architecture (issue #4).
 - [ ] E2E integration với real model + PostgreSQL/pgvector.
 
 ### P1.2 FastAPI — IMPLEMENTED / INTEGRATION TEST PENDING
@@ -96,4 +97,4 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 
 ## Current execution order
 
-P0.1 real-model benchmark (blocked on assets/data) -> P0.2 quality calibration -> P0.3 tracking benchmark -> P0.4 liveness benchmark (protocol ready; blocked on model/data) -> P1.1 observe successful CI import-guard run + vector recall benchmark (issue #3) -> P1.2 PostgreSQL-backed API integration -> P1.3 MQTT broker execution (await successful CI run) -> P2.1 PC CPU baseline -> P2.1 Raspberry Pi -> P2.1 Android -> P2.2 model A/B.
+P0.1 real-model benchmark (blocked on assets/data) -> P0.2 quality calibration -> P0.3 tracking benchmark -> P0.4 liveness benchmark (protocol ready; blocked on model/data) -> P1.1 observe successful CI import-guard run + vector recall benchmark (issue #3) + retrieval architecture benchmark (issue #4) -> P1.2 PostgreSQL-backed API integration -> P1.3 MQTT broker execution (await successful CI run) -> P2.1 PC CPU baseline -> P2.1 Raspberry Pi -> P2.1 Android -> P2.2 model A/B.
