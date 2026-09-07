@@ -6,24 +6,13 @@ embeddings stay on HTTP/WebSocket recognition paths and never enter MQTT.
 
 from __future__ import annotations
 
-import json
-import ssl
 import threading
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 import paho.mqtt.client as mqtt
 
-from src.devices.mqtt_contract import (
-    build_availability_topic,
-    build_command_topic,
-    build_event_topic,
-    build_state_topic,
-    encode_command,
-    encode_event,
-    encode_state,
-    validate_device_id,
-)
+from src.devices.mqtt_contract import decode, encode, make_command, make_event, make_state, make_topics
 
 
 CommandHandler = Callable[[dict[str, Any]], None]
@@ -54,9 +43,9 @@ class MQTTAdapter:
         command_handler: Optional[CommandHandler] = None,
         client: Optional[mqtt.Client] = None,
     ) -> None:
-        validate_device_id(device_id)
         self.settings = settings
         self.device_id = device_id
+        self.topics = make_topics(device_id)
         self.command_handler = command_handler
         self._seen_request_ids: set[str] = set()
         self._lock = threading.Lock()
@@ -70,37 +59,35 @@ class MQTTAdapter:
                 ca_certs=settings.ca_cert,
                 certfile=settings.client_cert,
                 keyfile=settings.client_key,
-                tls_version=ssl.PROTOCOL_TLS_CLIENT,
             )
         self.client.reconnect_delay_set(
             min_delay=settings.reconnect_min_delay,
             max_delay=settings.reconnect_max_delay,
         )
-        self.client.will_set(
-            build_availability_topic(device_id),
-            payload="offline",
-            qos=1,
-            retain=True,
-        )
+        self.client.will_set(self.topics.availability, payload="offline", qos=1, retain=True)
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
         self.client.on_message = self._on_message
 
     @property
     def command_topic(self) -> str:
-        return build_command_topic(self.device_id)
+        return self.topics.command
 
     @property
     def state_topic(self) -> str:
-        return build_state_topic(self.device_id)
+        return self.topics.state
 
     @property
     def event_topic(self) -> str:
-        return build_event_topic(self.device_id)
+        return self.topics.event
 
     @property
     def availability_topic(self) -> str:
-        return build_availability_topic(self.device_id)
+        return self.topics.availability
+
+    @property
+    def is_connected(self) -> bool:
+        return self._connected.is_set()
 
     def connect(self) -> None:
         self.client.connect(self.settings.host, self.settings.port, self.settings.keepalive)
@@ -110,17 +97,23 @@ class MQTTAdapter:
         self.client.loop_stop()
         self.client.disconnect()
 
-    def publish_state(self, state: dict[str, Any]) -> mqtt.MQTTMessageInfo:
-        payload = encode_state(self.device_id, state)
-        return self.client.publish(self.state_topic, payload=payload, qos=1, retain=True)
+    def publish_state(self, *, status: str, firmware_version: str, model_version: str | None = None, camera_id: str | None = None) -> mqtt.MQTTMessageInfo:
+        body = make_state(
+            self.device_id,
+            status=status,
+            firmware_version=firmware_version,
+            model_version=model_version,
+            camera_id=camera_id,
+        )
+        return self.client.publish(self.state_topic, payload=encode(body), qos=1, retain=True)
 
-    def publish_event(self, event: dict[str, Any]) -> mqtt.MQTTMessageInfo:
-        payload = encode_event(event)
-        return self.client.publish(self.event_topic, payload=payload, qos=1, retain=False)
+    def publish_event(self, *, request_id: str, event_type: str, payload: Optional[dict[str, Any]] = None) -> mqtt.MQTTMessageInfo:
+        body = make_event(request_id=request_id, event_type=event_type, payload=payload)
+        return self.client.publish(self.event_topic, payload=encode(body), qos=1, retain=False)
 
     def publish_command(self, request_id: str, command: str, payload: Optional[dict[str, Any]] = None) -> mqtt.MQTTMessageInfo:
-        body = encode_command(request_id=request_id, command=command, payload=payload or {})
-        return self.client.publish(self.command_topic, payload=body, qos=1, retain=False)
+        body = make_command(request_id=request_id, command=command, payload=payload or {})
+        return self.client.publish(self.command_topic, payload=encode(body), qos=1, retain=False)
 
     def _on_connect(self, client: mqtt.Client, userdata: Any, flags: Any, reason_code: Any, properties: Any = None) -> None:
         if int(reason_code) != 0:
@@ -136,7 +129,7 @@ class MQTTAdapter:
         if message.topic != self.command_topic:
             return
         try:
-            body = json.loads(message.payload.decode("utf-8"))
+            body = decode(message.payload)
             request_id = body.get("request_id")
             if not isinstance(request_id, str) or not request_id:
                 return
@@ -146,5 +139,5 @@ class MQTTAdapter:
                 self._seen_request_ids.add(request_id)
             if self.command_handler:
                 self.command_handler(body)
-        except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        except ValueError:
             return
