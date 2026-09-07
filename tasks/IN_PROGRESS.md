@@ -10,7 +10,7 @@ Nhiệm vụ đang thực hiện:
 - [x] Shared database dependency; API fail-closed nếu model recognition thật chưa được cấu hình.
 - [x] Model registry contract: model_version → ONNX asset + SHA-256 fingerprint + 512D contract.
 - [x] Recognition pipeline contract: SCRFD → quality gate → 5-point alignment → ArcFace embedding, with fail-closed face/quality checks.
-- [ ] Wire model registry and pipeline into API runtime.
+- [x] Wire model registry and pipeline into API runtime; fail-closed until real licensed assets + fingerprint are installed.
 - [ ] Add liveness gate to production pipeline after a validated anti-spoofing model is configured.
 - [ ] WebSocket `/ws/v1/events` stream kết quả realtime.
 - [ ] Chạy integration tests với PostgreSQL + pgvector và real model asset.
