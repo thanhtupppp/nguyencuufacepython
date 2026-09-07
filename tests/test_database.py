@@ -137,6 +137,36 @@ def test_sqlite_persistence(tmp_path):
     client2.close()
 
 
+def test_sqlite_auto_migration_older_schema(tmp_path):
+    """Verify legacy SQLite DB missing status/updated_at is seamlessly migrated."""
+    import sqlite3
+
+    db_path = tmp_path / "legacy_face.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("""
+    CREATE TABLE persons (
+        person_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        department TEXT DEFAULT 'default',
+        role TEXT DEFAULT 'user',
+        metadata TEXT DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    conn.execute("INSERT INTO persons (person_id, name) VALUES ('old_user_1', 'Legacy User');")
+    conn.commit()
+    conn.close()
+
+    # Now open with DatabaseClient - must auto-migrate without error
+    client = DatabaseClient(sqlite_path=db_path)
+    p = client.get_person("old_user_1")
+    assert p is not None
+    assert p["name"] == "Legacy User"
+    assert p["status"] == "active"
+    client.close()
+
+
+
 def test_person_status_and_active_scoping(db_client):
     """Verify person status scoping and active_only filter for vector searches."""
     db_client.create_person("emp_active", "Active User")

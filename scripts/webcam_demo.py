@@ -218,7 +218,7 @@ def run_webcam(
         max_pitch=40.0,
         min_brightness=25.0,
     )
-    anti_spoof = AntiSpoofDetector(model_path=None, threshold=0.75)
+    anti_spoof = AntiSpoofDetector(model_path=None, threshold=0.75, min_face_size=50)
 
     print("5. Khởi tạo module Face Tracker & Temporal Voting Engine...")
     tracker = FaceTracker(iou_threshold=0.25, max_lost_frames=30, min_hits_to_activate=1)
@@ -315,7 +315,11 @@ def run_webcam(
                     item.similarity = rec_dec.similarity
                     item.margin = rec_dec.margin
                 else:
-                    item.predicted_id = "SPOOF_DETECTED"
+                    decision_val = spoof_res.decision.value if hasattr(spoof_res.decision, "value") else str(spoof_res.decision)
+                    if decision_val == "FAIL":
+                        item.predicted_id = "SPOOF_DETECTED"
+                    else:
+                        item.predicted_id = spoof_res.reason or "INCONCLUSIVE"
                     item.similarity = spoof_res.liveness_score
             else:
                 item.predicted_id = "LOW_QUALITY"

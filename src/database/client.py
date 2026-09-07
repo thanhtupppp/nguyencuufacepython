@@ -117,8 +117,19 @@ class DatabaseClient:
         """)
         self._sqlite_conn.commit()
 
-        # Load existing persons into cache
+        # Ensure schema migrations for existing SQLite databases
         cur = self._sqlite_conn.cursor()
+        cur.execute("PRAGMA table_info(persons);")
+        existing_cols = {row[1] for row in cur.fetchall()}
+        if "status" not in existing_cols:
+            self._sqlite_conn.execute("ALTER TABLE persons ADD COLUMN status TEXT DEFAULT 'active';")
+            self._sqlite_conn.execute("UPDATE persons SET status = 'active' WHERE status IS NULL;")
+        if "updated_at" not in existing_cols:
+            self._sqlite_conn.execute("ALTER TABLE persons ADD COLUMN updated_at TIMESTAMP;")
+            self._sqlite_conn.execute("UPDATE persons SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL;")
+        self._sqlite_conn.commit()
+
+        # Load existing persons into cache
         cur.execute("SELECT person_id, name, department, role, metadata, status FROM persons;")
         for row in cur.fetchall():
             meta = json.loads(row[4]) if row[4] else {}
@@ -301,7 +312,7 @@ class DatabaseClient:
         if self.use_sqlite or self.use_memory:
             return self._mem_persons.get(person_id)
 
-        sql = "SELECT person_id, name, department, role, metadata FROM persons WHERE person_id = %s;"
+        sql = "SELECT person_id, name, department, role, metadata, status FROM persons WHERE person_id = %s;"
         with self._conn.cursor() as cur:
             cur.execute(sql, (person_id,))
             row = cur.fetchone()
@@ -313,6 +324,7 @@ class DatabaseClient:
                 "department": row[2],
                 "role": row[3],
                 "metadata": row[4],
+                "status": row[5] if len(row) > 5 else "active",
             }
 
     def list_persons(self) -> list[dict[str, Any]]:
@@ -320,12 +332,19 @@ class DatabaseClient:
         if self.use_sqlite or self.use_memory:
             return list(self._mem_persons.values())
 
-        sql = "SELECT person_id, name, department, role, metadata FROM persons ORDER BY created_at DESC;"
+        sql = "SELECT person_id, name, department, role, metadata, status FROM persons ORDER BY created_at DESC;"
         with self._conn.cursor() as cur:
             cur.execute(sql)
             rows = cur.fetchall()
             return [
-                {"person_id": r[0], "name": r[1], "department": r[2], "role": r[3], "metadata": r[4]}
+                {
+                    "person_id": r[0],
+                    "name": r[1],
+                    "department": r[2],
+                    "role": r[3],
+                    "metadata": r[4],
+                    "status": r[5] if len(r) > 5 else "active",
+                }
                 for r in rows
             ]
 
