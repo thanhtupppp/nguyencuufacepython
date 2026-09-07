@@ -1,18 +1,11 @@
-"""
-Preflight validation for the real face-recognition benchmark.
-
-This validator does not run a recognition model. It prevents invalid benchmark
-inputs from producing misleading FAR/FRR/EER numbers by checking image paths,
-identity labels, pair integrity, duplicate leakage, and minimum sample counts.
-"""
+"""Preflight validation for the real face-recognition benchmark."""
 
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
-import csv
 from collections import Counter
-
+import csv
+from pathlib import Path
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
@@ -28,6 +21,12 @@ def read_pairs(path: Path) -> list[dict[str, str]]:
     return rows
 
 
+def _pair_key(row: dict[str, str]) -> tuple[str, str, str]:
+    """Canonicalize pair order so A/B and B/A cannot leak as separate trials."""
+    p1, p2 = row["path1"], row["path2"]
+    return (min(p1, p2), max(p1, p2), row["condition"])
+
+
 def validate_pairs(genuine: list[dict[str, str]], impostor: list[dict[str, str]]) -> list[str]:
     errors: list[str] = []
     all_rows = [(r, True) for r in genuine] + [(r, False) for r in impostor]
@@ -36,9 +35,9 @@ def validate_pairs(genuine: list[dict[str, str]], impostor: list[dict[str, str]]
     for row, expected_genuine in all_rows:
         p1, p2 = row["path1"], row["path2"]
         pid1, pid2 = row["person1"], row["person2"]
-        key = (p1, p2, row["condition"])
+        key = _pair_key(row)
         if key in seen:
-            errors.append(f"duplicate pair: {key}")
+            errors.append(f"duplicate/reversed pair: {key}")
         seen.add(key)
         if not Path(p1).exists():
             errors.append(f"missing image: {p1}")
@@ -49,6 +48,11 @@ def validate_pairs(genuine: list[dict[str, str]], impostor: list[dict[str, str]]
         actual_genuine = pid1 == pid2
         if actual_genuine != expected_genuine:
             errors.append(f"label mismatch: {p1} / {p2} ({pid1}, {pid2})")
+        csv_label = str(row.get("is_genuine", "")).strip().lower()
+        if csv_label not in {"0", "1", "true", "false"}:
+            errors.append(f"invalid is_genuine label: {p1} / {p2}: {csv_label}")
+        elif (csv_label in {"1", "true"}) != expected_genuine:
+            errors.append(f"CSV label mismatch: {p1} / {p2}: {csv_label}")
 
     if not genuine:
         errors.append("no genuine pairs")
