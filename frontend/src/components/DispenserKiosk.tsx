@@ -58,16 +58,14 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
     if (!res) return;
 
     setResult(res);
+    setAutoDismissSeconds(3);
 
     if (res.granted) {
       if (soundEnabled) soundEffects.playGranted();
-      setAutoDismissSeconds(6);
     } else {
       if (soundEnabled) soundEffects.playBlocked();
       if (res.status === 'COOLDOWN_BLOCKED' && res.cooldown_remaining_seconds) {
         setCountdownRemaining(res.cooldown_remaining_seconds);
-      } else {
-        setAutoDismissSeconds(6);
       }
     }
   };
@@ -285,13 +283,16 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
                 <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
                   <div
                     className="bg-emerald-500 h-full transition-all duration-1000"
-                    style={{ width: `${(autoDismissSeconds / 6) * 100}%` }}
+                    style={{ width: `${(autoDismissSeconds / 3) * 100}%` }}
                   />
                 </div>
+                <p className="text-[11px] text-slate-400">
+                  Tự động quay lại màn hình chờ sau {autoDismissSeconds}s...
+                </p>
               </div>
             ) : result.status === 'COOLDOWN_BLOCKED' ? (
               // ----------------- COOLDOWN BLOCKED -----------------
-              <div className="space-y-4 max-w-md">
+              <div className="space-y-3 max-w-md">
                 <div className="w-20 h-20 mx-auto rounded-3xl bg-amber-500/20 border-2 border-amber-500/60 flex items-center justify-center text-4xl shadow-[0_0_40px_rgba(245,158,11,0.3)]">
                   ⏱️
                 </div>
@@ -305,8 +306,8 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
                   </h3>
 
                   {/* Big Live Countdown Timer */}
-                  <div className="my-3 py-3 px-6 rounded-2xl bg-amber-950/40 border border-amber-800/60">
-                    <span className="text-xs text-amber-300 font-semibold block mb-1">
+                  <div className="my-2.5 py-2.5 px-6 rounded-2xl bg-amber-950/40 border border-amber-800/60">
+                    <span className="text-xs text-amber-300 font-semibold block mb-0.5">
                       Vui lòng đợi thêm:
                     </span>
                     <span className="text-3xl font-extrabold font-mono text-amber-400 tracking-wider">
@@ -319,16 +320,27 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
                   </p>
                 </div>
 
+                {/* Auto dismiss countdown bar */}
+                <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="bg-amber-500 h-full transition-all duration-1000"
+                    style={{ width: `${(autoDismissSeconds / 3) * 100}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Tự động quay lại màn hình chờ sau {autoDismissSeconds}s...
+                </p>
+
                 <button
                   onClick={() => setResult(null)}
-                  className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition active:scale-95"
+                  className="px-5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition active:scale-95"
                 >
-                  Đã hiểu, quay lại màn hình chính
+                  Đã hiểu, quay lại ngay
                 </button>
               </div>
             ) : (
               // ----------------- MASK / OCCLUDED / NO FACE / SERVER ERROR -----------------
-              <div className="space-y-4 max-w-md">
+              <div className="space-y-3 max-w-md">
                 <div className="w-20 h-20 mx-auto rounded-3xl bg-rose-500/20 border-2 border-rose-500/60 flex items-center justify-center text-4xl shadow-[0_0_40px_rgba(244,63,94,0.3)] animate-pulse">
                   {result.status === 'MASK_DETECTED'
                     ? '😷'
@@ -356,16 +368,27 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
                       ? 'Chưa Khởi Động Lại Backend Server!'
                       : 'Không Tìm Thấy Khuôn Mặt!'}
                   </h3>
-                  <p className="text-xs sm:text-sm text-rose-300 mt-2 font-medium">
+                  <p className="text-xs sm:text-sm text-rose-300 mt-1 font-medium">
                     {result.status === 'ERROR' && result.message === 'Not Found'
                       ? 'FastAPI Backend chưa nhận diện được đường dẫn /api/v1/dispenser. Vui lòng tắt terminal chạy python scripts/run_server.py và chạy lại với cờ --reload!'
                       : result.message}
                   </p>
                 </div>
 
+                {/* Auto dismiss countdown bar */}
+                <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="bg-rose-500 h-full transition-all duration-1000"
+                    style={{ width: `${(autoDismissSeconds / 3) * 100}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Tự động quay lại màn hình chờ sau {autoDismissSeconds}s...
+                </p>
+
                 <button
                   onClick={() => setResult(null)}
-                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg shadow-rose-600/30 transition active:scale-95"
+                  className="px-5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg shadow-rose-600/30 transition active:scale-95"
                 >
                   Thử lại ngay
                 </button>
