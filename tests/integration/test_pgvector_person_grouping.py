@@ -59,7 +59,10 @@ def test_postgres_search_returns_top_k_people_not_embedding_rows():
                     id BIGSERIAL PRIMARY KEY,
                     person_id TEXT NOT NULL REFERENCES persons(person_id),
                     embedding vector(4) NOT NULL,
-                    model_version TEXT NOT NULL
+                    model_version TEXT NOT NULL,
+                    quality_score REAL DEFAULT 1.0,
+                    source_image_path TEXT,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
                 );
             """)
             cur.execute("CREATE INDEX face_embeddings_hnsw ON face_embeddings USING hnsw (embedding vector_cosine_ops);")
