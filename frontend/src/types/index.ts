@@ -83,5 +83,6 @@ export interface DispenserConfig {
   pulse_ms: number;
   device_id: string;
   device_name: string;
+  viewfinder_style?: 'hud' | 'corners' | 'oval';
 }
 

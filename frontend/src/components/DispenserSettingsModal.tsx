@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sliders, Clock, Timer, Cpu, Check, RefreshCw, MapPin } from 'lucide-react';
+import { X, Sliders, Clock, Timer, Cpu, Check, RefreshCw, MapPin, ScanFace } from 'lucide-react';
 import { DispenserConfig } from '../types';
 
 interface DispenserSettingsModalProps {
@@ -20,6 +20,9 @@ export const DispenserSettingsModal: React.FC<DispenserSettingsModalProps> = ({
   const [pulseMs, setPulseMs] = useState<number>(config.pulse_ms);
   const [deviceId, setDeviceId] = useState<string>(config.device_id);
   const [deviceName, setDeviceName] = useState<string>(config.device_name);
+  const [viewfinderStyle, setViewfinderStyle] = useState<'hud' | 'corners' | 'oval'>(
+    config.viewfinder_style || 'hud'
+  );
 
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
@@ -31,6 +34,7 @@ export const DispenserSettingsModal: React.FC<DispenserSettingsModalProps> = ({
     setPulseMs(config.pulse_ms);
     setDeviceId(config.device_id);
     setDeviceName(config.device_name);
+    setViewfinderStyle(config.viewfinder_style || 'hud');
   }, [config, isOpen]);
 
   if (!isOpen) return null;
@@ -41,6 +45,7 @@ export const DispenserSettingsModal: React.FC<DispenserSettingsModalProps> = ({
     setPulseMs(2500);
     setDeviceId('dispenser_01');
     setDeviceName('Máy Cấp Giấy Vệ Sinh #1');
+    setViewfinderStyle('hud');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -53,6 +58,7 @@ export const DispenserSettingsModal: React.FC<DispenserSettingsModalProps> = ({
         pulse_ms: Number(pulseMs),
         device_id: deviceId.trim() || 'dispenser_01',
         device_name: deviceName.trim() || 'Máy Cấp Giấy Vệ Sinh',
+        viewfinder_style: viewfinderStyle,
       });
       setSavedSuccess(true);
       setTimeout(() => {
@@ -235,7 +241,78 @@ export const DispenserSettingsModal: React.FC<DispenserSettingsModalProps> = ({
 
           <div className="border-t border-slate-800/80" />
 
-          {/* SECTION 4: DEVICE INFO */}
+          {/* SECTION 4: VIEWFINDER HUD STYLE */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-200 uppercase tracking-wide flex items-center space-x-1.5">
+                <ScanFace className="w-4 h-4 text-cyan-400" />
+                <span>Kiểu Khung Ngắm Nhận Diện (Viewfinder Style)</span>
+              </label>
+              <span className="text-xs font-mono font-bold text-cyan-400 uppercase">
+                {viewfinderStyle}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setViewfinderStyle('hud')}
+                className={`p-3 rounded-xl border text-left transition flex flex-col justify-between space-y-1.5 ${
+                  viewfinderStyle === 'hud'
+                    ? 'bg-cyan-950/60 border-cyan-500 text-cyan-200 shadow-md shadow-cyan-950/40'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-xs font-bold">🎯 AI HUD Cao Cấp</span>
+                  {viewfinderStyle === 'hud' && <Check className="w-3.5 h-3.5 text-cyan-400" />}
+                </div>
+                <p className="text-[10px] text-slate-400 leading-tight">
+                  Mờ tối viền ngoài, 4 góc ngắm công nghệ + viền oval phát sáng + vạch chữ thập.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewfinderStyle('corners')}
+                className={`p-3 rounded-xl border text-left transition flex flex-col justify-between space-y-1.5 ${
+                  viewfinderStyle === 'corners'
+                    ? 'bg-cyan-950/60 border-cyan-500 text-cyan-200 shadow-md shadow-cyan-950/40'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-xs font-bold">🔲 Góc Ngắm AI</span>
+                  {viewfinderStyle === 'corners' && <Check className="w-3.5 h-3.5 text-cyan-400" />}
+                </div>
+                <p className="text-[10px] text-slate-400 leading-tight">
+                  4 góc ngắm L-bracket tối giản, trong suốt 100%, không che viền hậu cảnh.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewfinderStyle('oval')}
+                className={`p-3 rounded-xl border text-left transition flex flex-col justify-between space-y-1.5 ${
+                  viewfinderStyle === 'oval'
+                    ? 'bg-cyan-950/60 border-cyan-500 text-cyan-200 shadow-md shadow-cyan-950/40'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-xs font-bold">⭕ Apple FaceID</span>
+                  {viewfinderStyle === 'oval' && <Check className="w-3.5 h-3.5 text-cyan-400" />}
+                </div>
+                <p className="text-[10px] text-slate-400 leading-tight">
+                  Vòng sinh trắc học đồng tâm mượt mà, phát sáng quang học khi quét.
+                </p>
+              </button>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-800/80" />
+
+          {/* SECTION 5: DEVICE INFO */}
           <div className="space-y-2">
             <label className="text-xs font-bold text-slate-200 uppercase tracking-wide flex items-center space-x-1.5">
               <MapPin className="w-4 h-4 text-cyan-400" />

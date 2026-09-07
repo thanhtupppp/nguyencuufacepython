@@ -248,10 +248,12 @@ def test_dispenser_config_get_and_update():
             "pulse_ms": 3000,
             "device_id": "wc_tang1",
             "device_name": "Máy WC Tầng 1",
+            "viewfinder_style": "corners",
         },
     )
     assert res2.status_code == 200
     cfg2 = res2.json()["config"]
     assert cfg2["cooldown_minutes"] == 3.0
     assert cfg2["device_name"] == "Máy WC Tầng 1"
+    assert cfg2["viewfinder_style"] == "corners"
 

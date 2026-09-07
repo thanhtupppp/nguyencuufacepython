@@ -19,6 +19,7 @@ _dispenser_config = {
     "pulse_ms": 2500,
     "device_id": "dispenser_01",
     "device_name": "Máy Cấp Giấy Vệ Sinh #1",
+    "viewfinder_style": "hud",
 }
 
 
@@ -28,6 +29,7 @@ class DispenserConfigModel(BaseModel):
     pulse_ms: int = Field(default=2500, ge=500, le=10000)
     device_id: str = Field(default="dispenser_01", max_length=64)
     device_name: str = Field(default="Máy Cấp Giấy Vệ Sinh #1", max_length=128)
+    viewfinder_style: str = Field(default="hud", max_length=32)
 
 
 
@@ -330,5 +332,6 @@ async def update_dispenser_config(config: DispenserConfigModel) -> dict:
     _dispenser_config["pulse_ms"] = config.pulse_ms
     _dispenser_config["device_id"] = config.device_id
     _dispenser_config["device_name"] = config.device_name
+    _dispenser_config["viewfinder_style"] = config.viewfinder_style
     return {"status": "ok", "config": _dispenser_config}
 

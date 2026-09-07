@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { DispenseResult } from '../types';
 import { soundEffects } from '../utils/audio';
+import { FaceViewfinder, ViewfinderStyle } from './FaceViewfinder';
 
 interface DispenserKioskProps {
   videoRef: React.RefObject<HTMLVideoElement>;
@@ -30,6 +31,8 @@ interface DispenserKioskProps {
   cooldownMinutes: number;
   onChangeCooldown: (minutes: number) => void;
   onOpenSettings: () => void;
+  viewfinderStyle?: ViewfinderStyle;
+  onCycleViewfinderStyle?: () => void;
 }
 
 export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
@@ -44,6 +47,8 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
   cooldownMinutes,
   onChangeCooldown,
   onOpenSettings,
+  viewfinderStyle = 'hud',
+  onCycleViewfinderStyle,
 }) => {
   const [result, setResult] = useState<DispenseResult | null>(null);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
@@ -200,30 +205,13 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
               className="w-full h-full object-cover transform -scale-x-100"
             />
 
-            {/* Smart Face Guidance Oval & Scanner Reticle */}
-            {isStreaming && (
-              <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-4">
-                {/* Center Face Target Oval */}
-                <div
-                  className={`w-44 h-56 sm:w-56 sm:h-72 rounded-full border-2 border-dashed transition-all duration-500 flex flex-col items-center justify-between p-3 ${
-                    isProcessing
-                      ? 'border-cyan-400 shadow-[0_0_30px_rgba(6,182,212,0.6)] scale-105'
-                      : 'border-cyan-500/40'
-                  }`}
-                >
-                  <span className="text-[10px] font-mono text-cyan-400/80 uppercase tracking-wider bg-slate-950/60 px-2 py-0.5 rounded-full mt-1">
-                    {isProcessing ? 'Đang nhận diện AI...' : 'Đặt khuôn mặt vào đây'}
-                  </span>
-                  <div className="w-1.5 h-1.5 rounded-full bg-cyan-400/80 animate-ping" />
-                  <div className="h-4" />
-                </div>
-
-                {/* Laser scanline when processing */}
-                {isProcessing && (
-                  <div className="absolute left-8 right-8 h-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_16px_rgba(6,182,212,1)] animate-scan" />
-                )}
-              </div>
-            )}
+            {/* Modern Biometric Face Reticle & Smart HUD */}
+            <FaceViewfinder
+              isStreaming={isStreaming}
+              isProcessing={isProcessing}
+              style={viewfinderStyle}
+              onCycleStyle={onCycleViewfinderStyle}
+            />
           </>
         ) : (
           <div className="flex flex-col items-center justify-center text-slate-500 space-y-3 p-6 text-center">
