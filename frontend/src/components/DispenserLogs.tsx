@@ -1,12 +1,25 @@
-import React from 'react';
-import { ShieldCheck, UserPlus, Clock, AlertTriangle, Radio, Sparkles, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import {
+  ShieldCheck,
+  UserPlus,
+  Clock,
+  AlertTriangle,
+  Radio,
+  Sparkles,
+  Trash2,
+  RefreshCw,
+  X,
+  CheckCircle2,
+  CheckSquare,
+  Square,
+} from 'lucide-react';
 import { DispenseLog, DispenserStats } from '../types';
 
 interface DispenserLogsProps {
   logs: DispenseLog[];
   stats: DispenserStats | null;
   cooldownMinutes?: number;
-  onClear: () => void;
+  onClear: (clearTestUsers: boolean) => Promise<void> | void;
   onRefresh: () => void;
 }
 
@@ -17,6 +30,23 @@ export const DispenserLogs: React.FC<DispenserLogsProps> = ({
   onClear,
   onRefresh,
 }) => {
+  const [showModal, setShowModal] = useState<boolean>(false);
+  const [clearTestUsers, setClearTestUsers] = useState<boolean>(true);
+  const [isClearing, setIsClearing] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const handleConfirmClear = async () => {
+    try {
+      setIsClearing(true);
+      await onClear(clearTestUsers);
+      setShowModal(false);
+      setToastMessage('Đã xóa sạch nhật ký và reset dữ liệu test!');
+      setTimeout(() => setToastMessage(null), 3000);
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
   const formatTime = (ts: string) => {
     try {
       const date = new Date(ts);
@@ -104,6 +134,14 @@ export const DispenserLogs: React.FC<DispenserLogsProps> = ({
         </div>
       )}
 
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="mb-3 px-3.5 py-2 rounded-xl bg-emerald-950/90 border border-emerald-700/80 text-emerald-300 text-xs flex items-center space-x-2 animate-in fade-in slide-in-from-top-2 duration-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="font-medium">{toastMessage}</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
         <div className="flex items-center space-x-2">
@@ -118,16 +156,97 @@ export const DispenserLogs: React.FC<DispenserLogsProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center space-x-1">
+        {/* Action Buttons */}
+        <div className="flex items-center space-x-1.5">
           <button
-            onClick={onClear}
-            className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-rose-400 transition"
-            title="Xóa danh sách hiển thị"
+            onClick={onRefresh}
+            className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 transition"
+            title="Làm mới dữ liệu nhật ký"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800/80 hover:border-rose-600 text-rose-300 hover:text-white text-xs font-semibold shadow-md shadow-rose-950/30 transition transform active:scale-95"
+            title="Xóa toàn bộ nhật ký và reset dữ liệu để test lại từ đầu"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+            <span>Xóa Log Test</span>
           </button>
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center space-x-2 text-rose-400">
+                <AlertTriangle className="w-5 h-5" />
+                <h3 className="font-bold text-base text-white">Xóa Nhật Ký & Reset Test</h3>
+              </div>
+              <button
+                onClick={() => setShowModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Bạn có chắc muốn xóa toàn bộ lịch sử cấp giấy trong cơ sở dữ liệu không?
+              Hành động này sẽ đặt lại các chỉ số thống kê (đã cấp, chặn lạm dụng) về <strong>0</strong>.
+            </p>
+
+            {/* Checkbox option to also remove test guest accounts */}
+            <div
+              onClick={() => setClearTestUsers(!clearTestUsers)}
+              className="flex items-start space-x-2.5 p-3 rounded-xl bg-slate-950 border border-slate-800/80 cursor-pointer hover:border-slate-700 transition"
+            >
+              <div className="mt-0.5 text-cyan-400">
+                {clearTestUsers ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4 text-slate-500" />}
+              </div>
+              <div>
+                <span className="text-xs font-semibold text-slate-200 block">
+                  Xóa tài khoản khách thử nghiệm (USER_*)
+                </span>
+                <span className="text-[11px] text-slate-400 leading-normal block mt-0.5">
+                  Giúp bạn test nhận diện lại khuôn mặt như một <strong>người dùng mới hoàn toàn</strong> (không bị chặn Cooldown 5 phút).
+                </span>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-800">
+              <button
+                disabled={isClearing}
+                onClick={() => setShowModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-700 transition"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                disabled={isClearing}
+                onClick={handleConfirmClear}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/30 transition flex items-center space-x-1.5 active:scale-95 disabled:opacity-50"
+              >
+                {isClearing ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Đang xóa...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Xác Nhận Xóa Sạch</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Scrollable Events List */}
       <div className="flex-1 overflow-y-auto space-y-2 mt-3 pr-1 max-h-[460px]">

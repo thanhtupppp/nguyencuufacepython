@@ -335,6 +335,26 @@ async def get_dispenser_logs(limit: int = 50) -> list[dict]:
     return db.get_dispense_logs(limit=limit)
 
 
+@router.delete("/logs")
+async def clear_dispenser_logs(clear_test_users: bool = Query(default=True)) -> dict:
+    """Clears all dispense history logs and optionally auto-enrolled guest test users."""
+    deleted_count = db.clear_dispense_logs(clear_auto_enrolled_test_users=clear_test_users)
+    stats = db.get_dispense_stats()
+
+    await ws_manager.broadcast({
+        "event_type": "DISPENSER_LOGS_CLEARED",
+        "deleted_count": deleted_count,
+        "stats": stats,
+    })
+
+    return {
+        "status": "ok",
+        "deleted_count": deleted_count,
+        "stats": stats,
+        "message": "Đã xóa toàn bộ nhật ký cấp giấy và đặt lại dữ liệu thử nghiệm.",
+    }
+
+
 @router.get("/config")
 async def get_dispenser_config() -> dict:
     """Returns current dispenser settings."""

@@ -19,6 +19,7 @@ import {
   fetchDispenserLogs,
   fetchDispenserConfig,
   updateDispenserConfig,
+  clearDispenserLogs,
 } from './services/api';
 import { Person, RecognitionResult, DispenseResult, DispenserStats, DispenseLog, DispenserConfig } from './types';
 import { Shield, Sparkles } from 'lucide-react';
@@ -134,10 +135,18 @@ export function App() {
   // Update dispenser logs upon WebSocket trigger
   useEffect(() => {
     if (!lastEvent) return;
-    if (lastEvent.event_type === 'DISPENSER_TRIGGER' || lastEvent.event_type === 'DISPENSER_BLOCKED') {
+    if (
+      lastEvent.event_type === 'DISPENSER_TRIGGER' ||
+      lastEvent.event_type === 'DISPENSER_BLOCKED' ||
+      lastEvent.event_type === 'DISPENSER_LOGS_CLEARED'
+    ) {
       loadDispenserData();
+      if (lastEvent.event_type === 'DISPENSER_LOGS_CLEARED') {
+        setDispenserLogs([]);
+        loadPersons();
+      }
     }
-  }, [lastEvent, loadDispenserData]);
+  }, [lastEvent, loadDispenserData, loadPersons]);
 
   // Auto-start camera when mounting Kiosk mode
   useEffect(() => {
@@ -176,6 +185,18 @@ export function App() {
       };
     } finally {
       setIsDispensing(false);
+    }
+  };
+
+  // Clear dispenser logs and reset test data
+  const handleClearLogs = async (clearTestUsers: boolean) => {
+    try {
+      await clearDispenserLogs(clearTestUsers);
+      setDispenserLogs([]);
+      await loadDispenserData();
+      await loadPersons();
+    } catch (err: any) {
+      console.error('Failed to clear dispenser logs:', err);
     }
   };
 

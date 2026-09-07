@@ -162,4 +162,15 @@ export async function checkPresence(imageBlob: Blob): Promise<PresenceResult> {
   return res.json();
 }
 
+export async function clearDispenserLogs(
+  clearTestUsers: boolean = true
+): Promise<{ deleted_count: number; stats: DispenserStats; message: string }> {
+  const res = await fetch(`${API_BASE}/api/v1/dispenser/logs?clear_test_users=${clearTestUsers}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Không thể xóa nhật ký cấp giấy');
+  return res.json();
+}
+
+
 

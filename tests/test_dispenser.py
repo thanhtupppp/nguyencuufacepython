@@ -311,3 +311,24 @@ def test_dispenser_presence_check(monkeypatch):
     assert data2["confidence"] == 0.0
     assert data2["bbox"] is None
 
+
+def test_dispenser_clear_logs():
+    # 1. Add dummy records directly to db
+    db.log_dispense("USER_TEST1", "dispenser_01", "GRANTED", 1.0, 0, "Test 1")
+    db.log_dispense("USER_TEST2", "dispenser_01", "COOLDOWN_BLOCKED", 0.95, 120, "Test 2")
+    assert len(db.get_dispense_logs()) == 2
+
+    # 2. Call DELETE /api/v1/dispenser/logs
+    res = client.delete("/api/v1/dispenser/logs?clear_test_users=true")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "ok"
+    assert data["deleted_count"] == 2
+    assert data["stats"]["total_granted"] == 0
+    assert data["stats"]["total_blocked"] == 0
+
+    # 3. Check logs now empty
+    logs_res = client.get("/api/v1/dispenser/logs")
+    assert logs_res.status_code == 200
+    assert logs_res.json() == []
+

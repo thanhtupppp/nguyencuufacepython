@@ -789,3 +789,31 @@ class DatabaseClient:
 
         return []
 
+    def clear_dispense_logs(self, clear_auto_enrolled_test_users: bool = False) -> int:
+        """
+        Clears all dispense logs for test reset.
+        If clear_auto_enrolled_test_users is True, also deletes auto-enrolled USER_* test accounts.
+        """
+        deleted_count = 0
+        if self.use_sqlite and self._sqlite_conn:
+            cur = self._sqlite_conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM dispense_logs;")
+            deleted_count = cur.fetchone()[0]
+            cur.execute("DELETE FROM dispense_logs;")
+            if clear_auto_enrolled_test_users:
+                cur.execute("DELETE FROM face_embeddings WHERE person_id LIKE 'USER_%';")
+                cur.execute("DELETE FROM persons WHERE person_id LIKE 'USER_%';")
+            self._sqlite_conn.commit()
+            return deleted_count
+
+        if self.use_memory:
+            deleted_count = len(self._mem_dispense_logs)
+            self._mem_dispense_logs.clear()
+            if clear_auto_enrolled_test_users:
+                self._mem_persons = {k: v for k, v in self._mem_persons.items() if not k.startswith("USER_")}
+                self._mem_embeddings = [e for e in self._mem_embeddings if not e["person_id"].startswith("USER_")]
+            return deleted_count
+
+        return 0
+
+
