@@ -57,7 +57,8 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 - [x] MQTT adapter unit tests.
 - [x] Local Mosquitto integration harness + opt-in broker tests.
 - [x] Shared idempotency abstraction: bounded TTL fallback + PostgreSQL atomic store.
-- [ ] Execute MQTT broker integration test and capture result.
+- [x] CI workflow provisions Mosquitto and runs the real-broker test suite.
+- [ ] Observe a successful CI broker run and capture result.
 - [x] HTTP/WebSocket adapter contract tests.
 - [x] Multi-camera device/session runtime model.
 - [x] Persist device/session state for multi-worker deployment.
