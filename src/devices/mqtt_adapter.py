@@ -1,8 +1,4 @@
-"""MQTT v1 transport adapter for edge-device control/state/events.
-
-The adapter deliberately carries compact JSON envelopes only; biometric images and
-embeddings stay on HTTP/WebSocket recognition paths and never enter MQTT.
-"""
+"""MQTT v1 transport adapter for edge-device control/state/events."""
 
 from __future__ import annotations
 
@@ -12,8 +8,8 @@ from typing import Any, Callable, Optional
 
 import paho.mqtt.client as mqtt
 
+from src.devices.idempotency import IdempotencyStore, TTLMemoryIdempotencyStore
 from src.devices.mqtt_contract import decode, encode, make_command, make_event, make_state, make_topics
-
 
 CommandHandler = Callable[[dict[str, Any]], None]
 
@@ -34,7 +30,11 @@ class MQTTSettings:
 
 
 class MQTTAdapter:
-    """Small, testable Paho adapter implementing the repository MQTT v1 contract."""
+    """Paho adapter implementing MQTT v1 with injectable idempotency storage.
+
+    The default store is bounded/TTL and intended only for one worker. A shared
+    PostgresIdempotencyStore should be injected for horizontally scaled workers.
+    """
 
     def __init__(
         self,
@@ -42,28 +42,21 @@ class MQTTAdapter:
         device_id: str,
         command_handler: Optional[CommandHandler] = None,
         client: Optional[mqtt.Client] = None,
+        idempotency_store: Optional[IdempotencyStore] = None,
     ) -> None:
         self.settings = settings
         self.device_id = device_id
         self.topics = make_topics(device_id)
         self.command_handler = command_handler
-        self._seen_request_ids: set[str] = set()
-        self._lock = threading.Lock()
+        self.idempotency_store = idempotency_store or TTLMemoryIdempotencyStore()
         self._connected = threading.Event()
 
         self.client = client or mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=settings.client_id)
         if settings.username is not None:
             self.client.username_pw_set(settings.username, settings.password)
         if settings.ca_cert:
-            self.client.tls_set(
-                ca_certs=settings.ca_cert,
-                certfile=settings.client_cert,
-                keyfile=settings.client_key,
-            )
-        self.client.reconnect_delay_set(
-            min_delay=settings.reconnect_min_delay,
-            max_delay=settings.reconnect_max_delay,
-        )
+            self.client.tls_set(ca_certs=settings.ca_cert, certfile=settings.client_cert, keyfile=settings.client_key)
+        self.client.reconnect_delay_set(min_delay=settings.reconnect_min_delay, max_delay=settings.reconnect_max_delay)
         self.client.will_set(self.topics.availability, payload="offline", qos=1, retain=True)
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
@@ -98,13 +91,7 @@ class MQTTAdapter:
         self.client.disconnect()
 
     def publish_state(self, *, status: str, firmware_version: str, model_version: str | None = None, camera_id: str | None = None) -> mqtt.MQTTMessageInfo:
-        body = make_state(
-            self.device_id,
-            status=status,
-            firmware_version=firmware_version,
-            model_version=model_version,
-            camera_id=camera_id,
-        )
+        body = make_state(self.device_id, status=status, firmware_version=firmware_version, model_version=model_version, camera_id=camera_id)
         return self.client.publish(self.state_topic, payload=encode(body), qos=1, retain=True)
 
     def publish_event(self, *, request_id: str, event_type: str, payload: Optional[dict[str, Any]] = None) -> mqtt.MQTTMessageInfo:
@@ -133,10 +120,8 @@ class MQTTAdapter:
             request_id = body.get("request_id")
             if not isinstance(request_id, str) or not request_id:
                 return
-            with self._lock:
-                if request_id in self._seen_request_ids:
-                    return
-                self._seen_request_ids.add(request_id)
+            if not self.idempotency_store.claim(self.device_id, request_id):
+                return
             if self.command_handler:
                 self.command_handler(body)
         except ValueError:
