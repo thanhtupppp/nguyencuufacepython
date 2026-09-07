@@ -39,8 +39,12 @@ def main() -> None:
 
     if sys.platform == "win32":
         try:
-            sys.stdout.reconfigure(encoding="utf-8")
-            sys.stderr.reconfigure(encoding="utf-8")
+            reconfig_out = getattr(sys.stdout, "reconfigure", None)
+            if callable(reconfig_out):
+                reconfig_out(encoding="utf-8")
+            reconfig_err = getattr(sys.stderr, "reconfigure", None)
+            if callable(reconfig_err):
+                reconfig_err(encoding="utf-8")
         except Exception:
             pass
 
