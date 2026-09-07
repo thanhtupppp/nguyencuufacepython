@@ -1,0 +1,56 @@
+# P2.1 Edge Runtime Benchmark Protocol
+
+## Goal
+
+Measure the same SCRFD + alignment + ArcFace pipeline on PC, Raspberry Pi ARM64 and Android without changing recognition semantics.
+
+## Preflight
+
+Run `python benchmarks/scripts/inspect_runtime.py --out benchmarks/results/runtime.json` on each target. Record Python/ORT version, CPU architecture and available Execution Providers.
+
+For each external model, first run `inspect_model_assets.py` and preserve the SHA-256/model contract.
+
+## Fixed pipeline
+
+`SCRFD -> 5 landmarks -> Umeyama 112x112 -> ArcFace -> 512-D L2`.
+
+Do not introduce FP16/INT8 until the FP32/FP baseline and accuracy threshold are locked.
+
+## Measurements
+
+- cold-start session creation time
+- warm-up latency
+- p50/p95/p99 inference latency
+- throughput (frames/s)
+- peak RSS where available
+- provider actually used
+- CPU utilization where available
+- embedding cosine parity against the reference PC CPU run
+
+## Acceptance
+
+A device run is not considered comparable unless model SHA-256, preprocessing, input dimensions and output normalization match the reference.
+
+Accuracy parity is a hard gate: optimized/mobile execution must not materially change recognition decisions at the locked threshold/margin. Any FP16/INT8 proposal requires a paired accuracy report before adoption.
+
+## Platform plan
+
+### PC
+
+Baseline: ONNX Runtime CPU. GPU is an optional secondary measurement.
+
+### Raspberry Pi ARM64
+
+Baseline: ONNX Runtime CPU. XNNPACK may be evaluated only if the selected runtime/build supports it; compare against CPU baseline rather than assuming it is faster.
+
+### Android
+
+Evaluate ORT CPU/XNNPACK first, then NNAPI where the device supports it. Record whether operators are actually delegated; do not claim accelerator usage from configuration alone.
+
+## Model usability
+
+Before Android packaging, run ONNX Runtime's model usability checker for the exact model. It estimates NNAPI/CoreML suitability, but final performance must still be measured on the target device.
+
+## Next
+
+After baseline results exist, evaluate FP16/INT8 and only then model A/B (AdaFace, MagFace, MobileFaceNet) using the same accuracy protocol.
