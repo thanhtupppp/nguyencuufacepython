@@ -2,11 +2,10 @@
  * Natural Vietnamese Voice Assistant & Sound Synthesizer
  * for Smart Toilet Paper Dispenser.
  *
- * Uses:
- * 1. Native Vietnamese Voice TTS (Google Vietnamese Speech) via Backend Cache / Stream.
- *    Eliminates English accent issues completely.
- * 2. Web Audio API synthesized chimes/tones (pleasant 2-tone chime & alert sound).
- * 3. Graceful offline fallback to Web Speech API.
+ * Priority order for voice playback:
+ * 1. Custom pre-recorded human voice files (.mp3) from `/audio/*.mp3` (Instant, studio quality).
+ * 2. Native Vietnamese TTS stream from Backend API (`/api/v1/dispenser/tts?text=...`).
+ * 3. Browser SpeechSynthesis fallback.
  */
 
 class AudioController {
@@ -84,6 +83,38 @@ class AudioController {
   }
 
   /**
+   * Attempts to play a custom studio-recorded MP3 file.
+   * If not found, gracefully falls back to native Vietnamese TTS.
+   */
+  public playAudioOrTTS(customAudioPath: string, fallbackText: string) {
+    if (!this.voiceEnabled) return;
+    if (typeof window === 'undefined') return;
+
+    this.stopSpeaking();
+
+    const audio = new Audio(customAudioPath);
+    audio.volume = this.voiceVolume;
+    audio.playbackRate = this.voiceRate;
+    this.currentAudio = audio;
+
+    let hasFallenBack = false;
+    const triggerFallback = () => {
+      if (hasFallenBack) return;
+      hasFallenBack = true;
+      this.speak(fallbackText);
+    };
+
+    audio.onerror = () => {
+      // File not found on disk, use Vietnamese TTS
+      triggerFallback();
+    };
+
+    audio.play().catch(() => {
+      triggerFallback();
+    });
+  }
+
+  /**
    * Speak a phrase in 100% natural native Vietnamese using the backend TTS engine.
    */
   public speak(text: string) {
@@ -93,7 +124,7 @@ class AudioController {
     try {
       this.stopSpeaking();
 
-      // Native Vietnamese TTS Stream (Crystal-clear pronunciation, zero English accent)
+      // Native Vietnamese TTS Stream (Google Vietnamese Speech)
       const ttsUrl = `/api/v1/dispenser/tts?text=${encodeURIComponent(text.trim())}`;
       const audio = new Audio(ttsUrl);
       audio.volume = this.voiceVolume;
@@ -101,7 +132,6 @@ class AudioController {
       this.currentAudio = audio;
 
       audio.play().catch(() => {
-        // Fallback to browser speechSynthesis if audio element play is blocked or offline
         this.speakFallbackSpeechSynthesis(text);
       });
     } catch {
@@ -205,7 +235,7 @@ class AudioController {
   }
 
   // =========================================================================
-  // SCENARIO-BASED VIETNAMESE VOICE ANNOUNCEMENTS (Chime + Voice Sequence)
+  // SCENARIO-BASED VIETNAMESE VOICE ANNOUNCEMENTS
   // =========================================================================
 
   public announceGranted(name?: string | null, isNewUser?: boolean) {
@@ -214,11 +244,17 @@ class AudioController {
 
     setTimeout(() => {
       if (isNewUser) {
-        this.speak("Chào mừng bạn! Hệ thống đang cấp giấy vệ sinh, xin mời nhận giấy.");
+        this.playAudioOrTTS(
+          '/audio/grant_new_user.mp3',
+          "Chào mừng bạn! Hệ thống đang cấp giấy vệ sinh, xin mời nhận giấy."
+        );
       } else if (name && !name.startsWith("USER_")) {
         this.speak(`Xin chào ${name}! Hệ thống đang cấp giấy vệ sinh cho bạn.`);
       } else {
-        this.speak("Nhận diện thành công! Hệ thống đang cấp giấy vệ sinh, xin mời nhận giấy.");
+        this.playAudioOrTTS(
+          '/audio/grant_existing.mp3',
+          "Nhận diện thành công! Hệ thống đang cấp giấy vệ sinh, xin mời nhận giấy."
+        );
       }
     }, 400);
   }
@@ -228,14 +264,10 @@ class AudioController {
     if (!this.voiceEnabled) return;
 
     setTimeout(() => {
-      const m = Math.floor(secondsRemaining / 60);
-      const s = secondsRemaining % 60;
-
-      if (m > 0) {
-        this.speak(`Bạn vừa mới nhận giấy vệ sinh. Vui lòng chờ thêm ${m} phút nữa trước khi lấy lần tiếp theo.`);
-      } else {
-        this.speak(`Bạn vừa mới nhận giấy vệ sinh. Vui lòng chờ thêm ${s} giây nữa nhé.`);
-      }
+      this.playAudioOrTTS(
+        '/audio/cooldown_blocked.mp3',
+        "Bạn vừa mới nhận giấy vệ sinh. Vui lòng chờ thêm ít phút trước khi lấy lần tiếp theo!"
+      );
     }, 400);
   }
 
@@ -243,7 +275,10 @@ class AudioController {
     this.playBlocked();
     if (!this.voiceEnabled) return;
     setTimeout(() => {
-      this.speak("Vui lòng tháo khẩu trang để hệ thống nhận diện khuôn mặt.");
+      this.playAudioOrTTS(
+        '/audio/mask_alert.mp3',
+        "Vui lòng tháo khẩu trang để hệ thống nhận diện khuôn mặt."
+      );
     }, 400);
   }
 
@@ -251,7 +286,10 @@ class AudioController {
     this.playBlocked();
     if (!this.voiceEnabled) return;
     setTimeout(() => {
-      this.speak("Khuôn mặt đang bị che khuất. Vui lòng bỏ tay hoặc vật cản trước mặt.");
+      this.playAudioOrTTS(
+        '/audio/occlusion_alert.mp3',
+        "Khuôn mặt đang bị che khuất. Vui lòng bỏ tay hoặc vật cản trước mặt."
+      );
     }, 400);
   }
 
@@ -259,7 +297,10 @@ class AudioController {
     this.playBlocked();
     if (!this.voiceEnabled) return;
     setTimeout(() => {
-      this.speak("Không tìm thấy khuôn mặt. Vui lòng đứng đối diện trước camera.");
+      this.playAudioOrTTS(
+        '/audio/no_face.mp3',
+        "Không tìm thấy khuôn mặt. Vui lòng đứng đối diện trước camera."
+      );
     }, 400);
   }
 
@@ -267,12 +308,18 @@ class AudioController {
     this.playBlocked();
     if (!this.voiceEnabled) return;
     setTimeout(() => {
-      this.speak("Cảnh báo hình ảnh không hợp lệ. Vui lòng thử lại trực tiếp trước camera.");
+      this.playAudioOrTTS(
+        '/audio/spoof_alert.mp3',
+        "Cảnh báo hình ảnh không hợp lệ. Vui lòng thử lại trực tiếp trước camera."
+      );
     }, 400);
   }
 
   public testVoice() {
-    this.speak("Xin chào! Đây là thông báo giọng nói tiếng Việt của máy cấp giấy vệ sinh thông minh.");
+    this.playAudioOrTTS(
+      '/audio/welcome_guide.mp3',
+      "Xin chào! Đây là thông báo giọng nói tiếng Việt của máy cấp giấy vệ sinh thông minh."
+    );
   }
 }
 
