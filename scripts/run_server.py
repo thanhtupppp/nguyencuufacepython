@@ -6,6 +6,12 @@ import argparse
 import os
 from pathlib import Path
 import sys
+
+# Ensure repository root is in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import uvicorn
 
 
@@ -31,16 +37,23 @@ def main() -> None:
     if chk_scrfd.is_file() and not os.getenv("SCRFD_MODEL_PATH"):
         os.environ["SCRFD_MODEL_PATH"] = str(chk_scrfd)
 
+    if sys.platform == "win32":
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+            sys.stderr.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+
     print("=" * 70)
-    print("NguyenCuuFacePython - Khởi động FastAPI Backend & WebSocket Hub")
+    print("NguyenCuuFacePython - Khoi dong FastAPI Backend & WebSocket Hub")
     print("=" * 70)
-    print(f" * Máy chủ đang chạy tại:   http://{args.host}:{args.port}")
+    print(f" * Server address:         http://{args.host}:{args.port}")
     print(f" * Swagger UI (API Docs):  http://localhost:{args.port}/docs")
-    print(f" * Redoc:                  http://localhost:{args.port}/redoc")
+    print(f" * Redoc documentation:    http://localhost:{args.port}/redoc")
     print(f" * WebSocket Event Stream: ws://localhost:{args.port}/ws/v1/events")
-    print(" * Quản lý danh tính:     /api/v1/persons")
-    print(" * Nhận diện & Xác thực:   /api/v1/faces (enroll, recognize, verify)")
-    print(" * Bắn sự kiện Edge:       /api/v1/events")
+    print(" * Quan ly danh tinh:      /api/v1/persons")
+    print(" * Nhan dien & Xac thuc:   /api/v1/faces (enroll, recognize, verify)")
+    print(" * Ban su kien Edge:       /api/v1/events")
     print("-" * 70)
 
     uvicorn.run(
@@ -49,6 +62,7 @@ def main() -> None:
         port=args.port,
         reload=args.reload,
         workers=args.workers,
+        app_dir=str(PROJECT_ROOT),
     )
 
 
