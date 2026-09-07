@@ -5,6 +5,7 @@ import { DispenseLog, DispenserStats } from '../types';
 interface DispenserLogsProps {
   logs: DispenseLog[];
   stats: DispenserStats | null;
+  cooldownMinutes?: number;
   onClear: () => void;
   onRefresh: () => void;
 }
@@ -12,6 +13,7 @@ interface DispenserLogsProps {
 export const DispenserLogs: React.FC<DispenserLogsProps> = ({
   logs,
   stats,
+  cooldownMinutes = 5,
   onClear,
   onRefresh,
 }) => {
@@ -48,7 +50,7 @@ export const DispenserLogs: React.FC<DispenserLogsProps> = ({
         return (
           <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-950/80 border border-amber-700/60 text-amber-300 flex items-center space-x-1">
             <Clock className="w-3 h-3 text-amber-400" />
-            <span>Chặn lạm dụng ({cooldownSec > 0 ? `${Math.ceil(cooldownSec / 60)}p` : '5p'})</span>
+            <span>Chặn lạm dụng ({cooldownSec > 0 ? `${Math.ceil(cooldownSec / 60)}p` : `${cooldownMinutes}p`})</span>
           </span>
         );
       case 'MASK_DETECTED':
@@ -86,7 +88,9 @@ export const DispenserLogs: React.FC<DispenserLogsProps> = ({
             </span>
           </div>
           <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800 text-center">
-            <span className="text-[10px] text-slate-400 font-medium block">CHẶN LẠM DỤNG</span>
+            <span className="text-[10px] text-slate-400 font-medium block">
+              CHẶN LẠM DỤNG ({cooldownMinutes}P)
+            </span>
             <span className="text-xl font-bold font-mono text-amber-400">
               {stats.total_blocked}
             </span>

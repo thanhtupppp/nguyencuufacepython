@@ -13,6 +13,7 @@ import {
   UserPlus,
   RefreshCw,
   Sparkles,
+  Settings,
 } from 'lucide-react';
 import { DispenseResult } from '../types';
 import { soundEffects } from '../utils/audio';
@@ -28,6 +29,7 @@ interface DispenserKioskProps {
   isProcessing: boolean;
   cooldownMinutes: number;
   onChangeCooldown: (minutes: number) => void;
+  onOpenSettings: () => void;
 }
 
 export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
@@ -41,6 +43,7 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
   isProcessing,
   cooldownMinutes,
   onChangeCooldown,
+  onOpenSettings,
 }) => {
   const [result, setResult] = useState<DispenseResult | null>(null);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
@@ -142,29 +145,19 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
 
         {/* Right Tool Buttons */}
         <div className="flex items-center space-x-2">
-          {/* Cooldown setting quick selector */}
-          <div className="hidden sm:flex items-center space-x-1 bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1 text-xs text-slate-300">
+          {/* Cooldown setting quick badge & Settings open */}
+          <button
+            onClick={onOpenSettings}
+            className="flex items-center space-x-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-300 transition"
+            title="Nhấp để cấu hình chi tiết thời gian chống lạm dụng"
+          >
             <Clock className="w-3.5 h-3.5 text-cyan-400" />
             <span className="text-[11px] text-slate-400">Chờ:</span>
-            <button
-              onClick={() => onChangeCooldown(1)}
-              className={`px-1.5 py-0.5 rounded text-[11px] font-medium transition ${
-                cooldownMinutes === 1 ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'
-              }`}
-              title="Đặt cooldown 1 phút (để thử nghiệm)"
-            >
-              1p (Test)
-            </button>
-            <button
-              onClick={() => onChangeCooldown(5)}
-              className={`px-1.5 py-0.5 rounded text-[11px] font-medium transition ${
-                cooldownMinutes === 5 ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'
-              }`}
-              title="Đặt cooldown 5 phút (thực tế)"
-            >
-              5p (Chuẩn)
-            </button>
-          </div>
+            <span className="text-xs font-mono font-bold text-cyan-300 bg-cyan-950 px-1.5 py-0.2 rounded border border-cyan-800/80">
+              {cooldownMinutes}p
+            </span>
+            <Settings className="w-3.5 h-3.5 text-slate-400 ml-0.5" />
+          </button>
 
           {/* Sound Toggle */}
           <button
@@ -173,6 +166,15 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
             title={soundEnabled ? 'Tắt âm thanh' : 'Bật âm thanh'}
           >
             {soundEnabled ? <Volume2 className="w-4 h-4 text-cyan-400" /> : <VolumeX className="w-4 h-4 text-slate-500" />}
+          </button>
+
+          {/* Dedicated Settings Button */}
+          <button
+            onClick={onOpenSettings}
+            className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-cyan-400 transition"
+            title="Cài đặt thông số Kiosk & Chống lạm dụng"
+          >
+            <Settings className="w-4 h-4" />
           </button>
 
           {/* Fullscreen Toggle */}

@@ -4,6 +4,7 @@ import uuid
 
 import numpy as np
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel, Field
 
 from src.api.dependencies import db, recognition_pipeline, verify_api_key
 from src.api.websocket_manager import ws_manager
@@ -11,6 +12,23 @@ from src.api.websocket_manager import ws_manager
 router = APIRouter(dependencies=[Depends(verify_api_key)])
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
+
+_dispenser_config = {
+    "cooldown_minutes": 5.0,
+    "dismiss_seconds": 3,
+    "pulse_ms": 2500,
+    "device_id": "dispenser_01",
+    "device_name": "Máy Cấp Giấy Vệ Sinh #1",
+}
+
+
+class DispenserConfigModel(BaseModel):
+    cooldown_minutes: float = Field(default=5.0, ge=0.1, le=1440.0)
+    dismiss_seconds: int = Field(default=3, ge=1, le=60)
+    pulse_ms: int = Field(default=2500, ge=500, le=10000)
+    device_id: str = Field(default="dispenser_01", max_length=64)
+    device_name: str = Field(default="Máy Cấp Giấy Vệ Sinh #1", max_length=128)
+
 
 
 def _validate_image_bytes(data: bytes) -> None:
@@ -296,3 +314,21 @@ async def get_dispenser_stats(device_id: Optional[str] = None) -> dict:
 async def get_dispenser_logs(limit: int = 50) -> list[dict]:
     """Returns recent dispense history."""
     return db.get_dispense_logs(limit=limit)
+
+
+@router.get("/config")
+async def get_dispenser_config() -> dict:
+    """Returns current dispenser settings."""
+    return _dispenser_config
+
+
+@router.post("/config")
+async def update_dispenser_config(config: DispenserConfigModel) -> dict:
+    """Updates dispenser settings (cooldown, pulse, device name)."""
+    _dispenser_config["cooldown_minutes"] = config.cooldown_minutes
+    _dispenser_config["dismiss_seconds"] = config.dismiss_seconds
+    _dispenser_config["pulse_ms"] = config.pulse_ms
+    _dispenser_config["device_id"] = config.device_id
+    _dispenser_config["device_name"] = config.device_name
+    return {"status": "ok", "config": _dispenser_config}
+

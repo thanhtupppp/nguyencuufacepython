@@ -230,3 +230,28 @@ def test_dispenser_stats_and_logs(monkeypatch):
     assert logs_res.status_code == 200
     logs = logs_res.json()
     assert len(logs) == 2
+
+
+def test_dispenser_config_get_and_update():
+    # 1. Get default config
+    res1 = client.get("/api/v1/dispenser/config")
+    assert res1.status_code == 200
+    cfg1 = res1.json()
+    assert "cooldown_minutes" in cfg1
+
+    # 2. Update config
+    res2 = client.post(
+        "/api/v1/dispenser/config",
+        json={
+            "cooldown_minutes": 3.0,
+            "dismiss_seconds": 3,
+            "pulse_ms": 3000,
+            "device_id": "wc_tang1",
+            "device_name": "Máy WC Tầng 1",
+        },
+    )
+    assert res2.status_code == 200
+    cfg2 = res2.json()["config"]
+    assert cfg2["cooldown_minutes"] == 3.0
+    assert cfg2["device_name"] == "Máy WC Tầng 1"
+

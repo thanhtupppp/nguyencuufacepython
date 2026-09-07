@@ -7,6 +7,7 @@ import { EnrollModal } from './components/EnrollModal';
 import { PersonsDrawer } from './components/PersonsDrawer';
 import { DispenserKiosk } from './components/DispenserKiosk';
 import { DispenserLogs } from './components/DispenserLogs';
+import { DispenserSettingsModal } from './components/DispenserSettingsModal';
 import { useCamera } from './hooks/useCamera';
 import { useWebSocket } from './hooks/useWebSocket';
 import {
@@ -16,8 +17,10 @@ import {
   requestToiletPaper,
   fetchDispenserStats,
   fetchDispenserLogs,
+  fetchDispenserConfig,
+  updateDispenserConfig,
 } from './services/api';
-import { Person, RecognitionResult, DispenseResult, DispenserStats, DispenseLog } from './types';
+import { Person, RecognitionResult, DispenseResult, DispenserStats, DispenseLog, DispenserConfig } from './types';
 import { Shield, Sparkles } from 'lucide-react';
 
 export function App() {
@@ -33,6 +36,13 @@ export function App() {
 
   // Dispenser state
   const [cooldownMinutes, setCooldownMinutes] = useState<number>(5.0);
+  const [dispenserConfig, setDispenserConfig] = useState<DispenserConfig>({
+    cooldown_minutes: 5.0,
+    dismiss_seconds: 3,
+    pulse_ms: 2500,
+    device_id: 'dispenser_01',
+    device_name: 'Máy Cấp Giấy Vệ Sinh #1',
+  });
   const [dispenserStats, setDispenserStats] = useState<DispenserStats | null>(null);
   const [dispenserLogs, setDispenserLogs] = useState<DispenseLog[]>([]);
   const [isDispensing, setIsDispensing] = useState<boolean>(false);
@@ -40,6 +50,7 @@ export function App() {
   // Modals & Drawers
   const [isEnrollOpen, setIsEnrollOpen] = useState(false);
   const [isPersonsOpen, setIsPersonsOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Camera hook
   const {
@@ -73,16 +84,30 @@ export function App() {
     }
   }, []);
 
-  // Load dispenser stats & logs
+  // Load dispenser stats, logs & config
   const loadDispenserData = useCallback(async () => {
     try {
-      const [stats, logs] = await Promise.all([fetchDispenserStats(), fetchDispenserLogs(30)]);
+      const [stats, logs, cfg] = await Promise.all([
+        fetchDispenserStats(),
+        fetchDispenserLogs(30),
+        fetchDispenserConfig().catch(() => null),
+      ]);
       setDispenserStats(stats);
       setDispenserLogs(logs);
+      if (cfg) {
+        setDispenserConfig(cfg);
+        setCooldownMinutes(cfg.cooldown_minutes);
+      }
     } catch {
       // Ignored if API offline
     }
   }, []);
+
+  const handleSaveConfig = async (newConfig: DispenserConfig) => {
+    const updated = await updateDispenserConfig(newConfig);
+    setDispenserConfig(updated);
+    setCooldownMinutes(updated.cooldown_minutes);
+  };
 
   // Health check polling
   useEffect(() => {
@@ -208,6 +233,7 @@ export function App() {
         totalPersons={persons.length}
         onOpenPersons={() => setIsPersonsOpen(true)}
         onOpenEnroll={() => setIsEnrollOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       {/* Mode Switcher Banner */}
@@ -267,7 +293,11 @@ export function App() {
                 onRequestPaper={handleRequestPaper}
                 isProcessing={isDispensing}
                 cooldownMinutes={cooldownMinutes}
-                onChangeCooldown={setCooldownMinutes}
+                onChangeCooldown={(min) => {
+                  setCooldownMinutes(min);
+                  handleSaveConfig({ ...dispenserConfig, cooldown_minutes: min });
+                }}
+                onOpenSettings={() => setIsSettingsOpen(true)}
               />
             </div>
 
@@ -276,6 +306,7 @@ export function App() {
               <DispenserLogs
                 logs={dispenserLogs}
                 stats={dispenserStats}
+                cooldownMinutes={cooldownMinutes}
                 onClear={() => setDispenserLogs([])}
                 onRefresh={loadDispenserData}
               />
@@ -335,6 +366,14 @@ export function App() {
           loadPersons();
           loadDispenserData();
         }}
+      />
+
+      {/* Dispenser Settings Modal */}
+      <DispenserSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        config={dispenserConfig}
+        onSave={handleSaveConfig}
       />
     </div>
   );

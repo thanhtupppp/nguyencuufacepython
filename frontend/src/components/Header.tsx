@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, Wifi, WifiOff, Users, UserPlus, Server } from 'lucide-react';
+import { ShieldCheck, Wifi, WifiOff, Users, UserPlus, Server, Settings } from 'lucide-react';
 import { ConnectionStatus } from '../types';
 
 interface HeaderProps {
@@ -8,6 +8,7 @@ interface HeaderProps {
   totalPersons: number;
   onOpenPersons: () => void;
   onOpenEnroll: () => void;
+  onOpenSettings: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -16,6 +17,7 @@ export const Header: React.FC<HeaderProps> = ({
   totalPersons,
   onOpenPersons,
   onOpenEnroll,
+  onOpenSettings,
 }) => {
   return (
     <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 px-4 lg:px-8 py-3 transition-colors">
@@ -98,6 +100,15 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="px-1.5 py-0.2 bg-slate-900 text-cyan-300 rounded font-mono text-[11px]">
               {totalPersons}
             </span>
+          </button>
+
+          {/* Settings Button */}
+          <button
+            onClick={onOpenSettings}
+            className="p-1.5 rounded-lg text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition"
+            title="Cài đặt thông số Kiosk & Chống lạm dụng"
+          >
+            <Settings className="w-4 h-4 text-cyan-400" />
           </button>
 
           {/* Enroll Modal Button */}

@@ -1,4 +1,4 @@
-import { Person, RecognitionResult, DispenseResult, DispenserStats, DispenseLog } from '../types';
+import { Person, RecognitionResult, DispenseResult, DispenserStats, DispenseLog, DispenserConfig } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -132,4 +132,22 @@ export async function fetchDispenserLogs(limit: number = 50): Promise<DispenseLo
   if (!res.ok) throw new Error('Không thể tải nhật ký cấp giấy');
   return res.json();
 }
+
+export async function fetchDispenserConfig(): Promise<DispenserConfig> {
+  const res = await fetch(`${API_BASE}/api/v1/dispenser/config`);
+  if (!res.ok) throw new Error('Không thể tải cấu hình máy cấp giấy');
+  return res.json();
+}
+
+export async function updateDispenserConfig(config: DispenserConfig): Promise<DispenserConfig> {
+  const res = await fetch(`${API_BASE}/api/v1/dispenser/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) throw new Error('Không thể lưu cấu hình máy cấp giấy');
+  const data = await res.json();
+  return data.config;
+}
+
 

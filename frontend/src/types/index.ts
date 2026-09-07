@@ -76,3 +76,12 @@ export interface DispenseLog {
   message: string;
   timestamp: string;
 }
+
+export interface DispenserConfig {
+  cooldown_minutes: number;
+  dismiss_seconds: number;
+  pulse_ms: number;
+  device_id: string;
+  device_name: string;
+}
+
