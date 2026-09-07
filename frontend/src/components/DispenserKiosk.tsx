@@ -77,6 +77,7 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const isCheckingPresenceRef = useRef<boolean>(false);
+  const consecutiveDetectionsRef = useRef<number>(0);
   const lastPresenceTimeRef = useRef<number>(0);
   const hasGreetedRef = useRef<boolean>(false);
   const isProcessingRef = useRef<boolean>(isProcessing);
@@ -92,21 +93,27 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
     soundEffects.setVoiceConfig(soundEnabled && voiceEnabled, voiceVolume, voiceRate);
   }, [soundEnabled, voiceEnabled, voiceVolume, voiceRate]);
 
-  // Offscreen fast frame capture (320x240 for <15ms SCRFD presence checking)
+  // Offscreen fast frame capture (320w preserving camera aspect ratio)
   const captureSmallFrame = (): Promise<Blob | null> => {
-    if (!videoRef.current || videoRef.current.readyState < 2) return Promise.resolve(null);
     const video = videoRef.current;
+    if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+      return Promise.resolve(null);
+    }
+    const targetW = 320;
+    const targetH = Math.round((video.videoHeight / video.videoWidth) * targetW) || 240;
     if (!offscreenCanvasRef.current) {
       offscreenCanvasRef.current = document.createElement('canvas');
-      offscreenCanvasRef.current.width = 320;
-      offscreenCanvasRef.current.height = 240;
     }
     const canvas = offscreenCanvasRef.current;
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
+    }
     const ctx = canvas.getContext('2d');
     if (!ctx) return Promise.resolve(null);
-    ctx.drawImage(video, 0, 0, 320, 240);
+    ctx.drawImage(video, 0, 0, targetW, targetH);
     return new Promise<Blob | null>((resolve) => {
-      canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.65);
+      canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.70);
     });
   };
 
@@ -114,6 +121,7 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
   const handleDispenseClick = async () => {
     if (isProcessing) return;
     setTouchlessCountdown(0);
+    consecutiveDetectionsRef.current = 0;
     setResult(null);
 
     const res = await onRequestPaper(cooldownMinutes);
@@ -163,6 +171,7 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
       setIsIdle(true);
       setPresenceDetected(false);
       setTouchlessCountdown(0);
+      consecutiveDetectionsRef.current = 0;
       return;
     }
 
@@ -184,27 +193,33 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
 
         const pres = await checkPresence(blob);
         if (pres.face_detected) {
-          lastPresenceTimeRef.current = Date.now();
-          setIsIdle(false);
-          setPresenceDetected(true);
+          consecutiveDetectionsRef.current += 1;
 
-          // Welcome greeting when someone walks up
-          if (welcomeVoiceEnabled && soundEnabled && !hasGreetedRef.current) {
-            hasGreetedRef.current = true;
-            soundEffects.announceWelcome();
-          }
+          // Require at least 2 consecutive positive detections to filter out momentary noise
+          if (consecutiveDetectionsRef.current >= 2) {
+            lastPresenceTimeRef.current = Date.now();
+            setIsIdle(false);
+            setPresenceDetected(true);
 
-          // Trigger touchless countdown if enabled and not already running
-          if (touchlessEnabled && touchlessCountdown <= 0 && !isProcessingRef.current) {
-            setTouchlessCountdown(touchlessDelay);
+            // Welcome greeting when someone walks up
+            if (welcomeVoiceEnabled && soundEnabled && !hasGreetedRef.current) {
+              hasGreetedRef.current = true;
+              soundEffects.announceWelcome();
+            }
+
+            // Trigger touchless countdown if enabled and not already running
+            if (touchlessEnabled && touchlessCountdown <= 0 && !isProcessingRef.current) {
+              setTouchlessCountdown(touchlessDelay);
+            }
           }
         } else {
+          consecutiveDetectionsRef.current = 0;
           setPresenceDetected(false);
           // If person steps away, cancel countdown immediately
           setTouchlessCountdown(0);
 
-          // Return to idle sleep mode after 3.5s of empty camera view
-          if (Date.now() - lastPresenceTimeRef.current > 3500) {
+          // Return to idle sleep mode after 2.5s of empty camera view
+          if (Date.now() - lastPresenceTimeRef.current > 2500) {
             setIsIdle(true);
             hasGreetedRef.current = false;
           }

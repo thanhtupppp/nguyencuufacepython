@@ -361,32 +361,85 @@ async def update_dispenser_config(config: DispenserConfigModel) -> dict:
 
 @router.post("/presence-check")
 async def check_presence(image: UploadFile = File(...)) -> dict:
-    """Fast presence check (<15ms) to detect if a face is in front of the kiosk camera."""
+    """Fast presence check for Kiosk with strict anti-false-positive filtering.
+    
+    Filters out background clutter, tiny distant faces, and non-face objects:
+    - Confidence threshold >= 0.70
+    - Face bounding box >= 45x45 px (must occupy significant portion of kiosk frame)
+    - Face center must be within central interactive viewing area
+    - Aspect ratio must match human face proportions (0.75 <= h/w <= 2.2)
+    - Facial eye distance validation
+    """
     if recognition_pipeline is None:
         raise HTTPException(status_code=503, detail="Recognition service is unavailable")
 
     data = await image.read()
     img_bgr = _decode_image(data)
+    h_img, w_img = img_bgr.shape[:2]
 
     try:
-        # Prefer fast direct SCRFD detector if available
         if hasattr(recognition_pipeline, "detector") and recognition_pipeline.detector:
             faces = recognition_pipeline.detector.detect(img_bgr)
-            if faces:
-                best = max(faces, key=lambda f: f.get("score", 0.0))
+            valid_faces = []
+            for f in faces:
+                score = float(f.get("score", 0.0))
+                bbox = f.get("bbox", [])
+                if len(bbox) != 4 or score < 0.70:
+                    continue
+
+                x1, y1, x2, y2 = bbox
+                fw = x2 - x1
+                fh = y2 - y1
+
+                # 1. Size check: Must be person standing in front of kiosk (not distant background)
+                min_w = max(45.0, w_img * 0.14)
+                min_h = max(45.0, h_img * 0.16)
+                if fw < min_w or fh < min_h:
+                    continue
+
+                # 2. Aspect ratio check
+                aspect = fh / max(1.0, fw)
+                if aspect < 0.75 or aspect > 2.2:
+                    continue
+
+                # 3. Position check: Center must be in interactive camera zone
+                cx = (x1 + x2) / 2.0
+                cy = (y1 + y2) / 2.0
+                if cx < 0.10 * w_img or cx > 0.90 * w_img:
+                    continue
+                if cy < 0.08 * h_img or cy > 0.92 * h_img:
+                    continue
+
+                # 4. Landmark check if available
+                landmarks = f.get("landmarks")
+                if landmarks is not None and len(landmarks) == 5:
+                    lm = np.asarray(landmarks, dtype=np.float32)
+                    eye_dist = float(np.linalg.norm(lm[1] - lm[0]))
+                    if eye_dist < 0.18 * fw:
+                        continue
+
+                valid_faces.append((score, f))
+
+            if valid_faces:
+                best_score, best_face = max(valid_faces, key=lambda item: item[0])
                 return {
                     "face_detected": True,
-                    "confidence": float(best.get("score", 0.0)),
-                    "bbox": [float(v) for v in best.get("bbox", [])],
+                    "confidence": best_score,
+                    "bbox": [float(v) for v in best_face.get("bbox", [])],
                 }
         else:
             best_face = recognition_pipeline.extract_best_face(img_bgr)
-            if best_face is not None:
-                return {
-                    "face_detected": True,
-                    "confidence": float(getattr(best_face, "detector_score", 0.95)),
-                    "bbox": [float(v) for v in getattr(best_face, "bbox", [])],
-                }
+            if best_face is not None and getattr(best_face, "detector_score", 0.0) >= 0.70:
+                bbox = getattr(best_face, "bbox", [])
+                if len(bbox) == 4:
+                    fw = bbox[2] - bbox[0]
+                    fh = bbox[3] - bbox[1]
+                    if fw >= 45.0 and fh >= 45.0:
+                        return {
+                            "face_detected": True,
+                            "confidence": float(best_face.detector_score),
+                            "bbox": [float(v) for v in bbox],
+                        }
     except Exception:
         pass
 
