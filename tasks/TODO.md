@@ -65,7 +65,9 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 
 ## P2 — Edge + Model A/B
 
-### P2.1 PC / Raspberry Pi / Android
+### P2.1 PC / Raspberry Pi / Android — PROTOCOL READY / BENCHMARK PENDING
+- [x] Edge runtime capability preflight script.
+- [x] Fixed cross-device benchmark protocol and acceptance criteria.
 - [ ] ONNX Runtime CPU baseline benchmark.
 - [ ] Raspberry Pi ARM64 benchmark.
 - [ ] Android NNAPI/XNNPACK benchmark.
@@ -79,4 +81,4 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 
 ## Current execution order
 
-P0.1 real-model benchmark (blocked on assets/data) -> P0.2 quality calibration -> P0.3 tracking benchmark -> P0.4 liveness calibration -> P1 integration tests -> P1.3 MQTT broker execution -> P2.1 edge benchmark -> P2.2 model A/B.
+P0.1 real-model benchmark (blocked on assets/data) -> P0.2 quality calibration -> P0.3 tracking benchmark -> P0.4 liveness calibration -> P1 integration tests -> P1.3 MQTT broker execution (await successful CI run) -> P2.1 edge benchmark (protocol ready) -> P2.2 model A/B.
