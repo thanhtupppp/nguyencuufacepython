@@ -135,10 +135,8 @@ class TemporalVotingEngine:
         self.similarity_floor = similarity_floor
 
     def _item_weight(self, item: DetectionItem) -> float:
-        """Higher-quality and higher-confidence observations contribute more evidence."""
         quality = float(np.clip(item.quality_score, 0.0, 1.0))
         detection = float(np.clip(item.score, 0.0, 1.0))
-        # Similarity is only used as confidence, not as a hard identity decision.
         sim = float(np.clip((item.similarity - self.similarity_floor) / max(1e-6, 1.0 - self.similarity_floor), 0.0, 1.0))
         return quality * detection * (0.5 + 0.5 * sim)
 
@@ -176,8 +174,6 @@ class TemporalVotingEngine:
                 weighted_breakdown=weighted,
             )
 
-        # Require both temporal support and weighted evidence. This prevents a
-        # few weak/blurred frames from overpowering a smaller set of strong frames.
         if raw_consensus >= self.min_consensus_ratio and weighted_consensus >= self.min_consensus_ratio:
             status, person_id = "CONFIRMED_MATCH", winner_id
         else:
@@ -196,7 +192,7 @@ class TemporalVotingEngine:
 
 
 class FaceTracker:
-    """Multi-face tracker using geometry first, optional embedding appearance second."""
+    """Multi-face tracker using geometry plus optional embedding appearance."""
 
     def __init__(
         self,
@@ -209,11 +205,15 @@ class FaceTracker:
     ):
         if not 0.0 <= appearance_weight <= 1.0:
             raise ValueError("appearance_weight must be in [0, 1]")
+        if not -1.0 <= appearance_threshold <= 1.0:
+            raise ValueError("appearance_threshold must be in [-1, 1]")
+        if not -1.0 <= recovery_embedding_threshold <= 1.0:
+            raise ValueError("recovery_embedding_threshold must be in [-1, 1]")
         self.iou_threshold = iou_threshold
         self.max_lost_frames = max_lost_frames
         self.min_hits_to_activate = min_hits_to_activate
         self.appearance_weight = appearance_weight
-        self.appearance_threshold = recovery_embedding_threshold if recovery_embedding_threshold > 0 else appearance_threshold
+        self.appearance_threshold = appearance_threshold
         self.recovery_embedding_threshold = recovery_embedding_threshold
         self.next_track_id = 1
         self.active_tracklets: dict[int, Tracklet] = {}
@@ -225,10 +225,9 @@ class FaceTracker:
         appearance = cosine_similarity(emb, det.embedding) if emb is not None and det.embedding is not None else -1.0
         if appearance < self.appearance_threshold:
             return -1.0
-        normalized_appearance = max(0.0, appearance)
-        return (1.0 - self.appearance_weight) * iou + self.appearance_weight * normalized_appearance
+        return (1.0 - self.appearance_weight) * iou + self.appearance_weight * max(0.0, appearance)
 
-    def _match_active(self, detections: list[DetectionItem], frame_idx: int) -> tuple[set[int], set[int]]:
+    def _match_active(self, detections: list[DetectionItem]) -> tuple[set[int], set[int]]:
         keys = list(self.active_tracklets.keys())
         matched_tracks: set[int] = set()
         matched_dets: set[int] = set()
@@ -239,12 +238,14 @@ class FaceTracker:
         for r, tid in enumerate(keys):
             for c, det in enumerate(detections):
                 iou = compute_iou(self.active_tracklets[tid].bbox, det.bbox)
-                if iou >= self.iou_threshold:
-                    score_matrix[r, c] = self._association_score(self.active_tracklets[tid], det)
-                elif self.active_tracklets[tid].latest_embedding is not None and det.embedding is not None:
-                    appearance = cosine_similarity(self.active_tracklets[tid].latest_embedding, det.embedding)
-                    if appearance >= self.appearance_threshold:
-                        score_matrix[r, c] = self.appearance_weight * max(0.0, appearance)
+                emb = self.active_tracklets[tid].latest_embedding
+                appearance = cosine_similarity(emb, det.embedding) if emb is not None and det.embedding is not None else -1.0
+                if iou >= self.iou_threshold and appearance >= self.appearance_threshold:
+                    score_matrix[r, c] = (1.0 - self.appearance_weight) * iou + self.appearance_weight * max(0.0, appearance)
+                elif iou >= self.iou_threshold and emb is None:
+                    score_matrix[r, c] = iou
+                elif appearance >= self.appearance_threshold:
+                    score_matrix[r, c] = self.appearance_weight * max(0.0, appearance)
 
         row_ind, col_ind = linear_sum_assignment(-score_matrix)
         for r, c in zip(row_ind, col_ind):
@@ -256,10 +257,8 @@ class FaceTracker:
             matched_dets.add(c)
         return matched_tracks, matched_dets
 
-    def _recover_lost(self, detections: list[DetectionItem], unmatched_dets: set[int], frame_idx: int) -> set[int]:
+    def _recover_lost(self, detections: list[DetectionItem], unmatched_dets: set[int]) -> set[int]:
         recovered: set[int] = set()
-        if not self.lost_tracklets:
-            return recovered
         for tid, track in list(self.lost_tracklets.items()):
             if track.time_since_update > self.max_lost_frames:
                 del self.lost_tracklets[tid]
@@ -284,18 +283,24 @@ class FaceTracker:
 
     def update(self, detections: list[DetectionItem], frame_idx: int) -> list[Tracklet]:
         tracklet_keys = list(self.active_tracklets.keys())
-        matched_tracks, matched_dets = self._match_active(detections, frame_idx)
+        matched_tracks, matched_dets = self._match_active(detections)
 
         for tid in set(tracklet_keys) - matched_tracks:
             tr = self.active_tracklets[tid]
             tr.time_since_update += 1
             if tr.time_since_update > self.max_lost_frames:
                 del self.active_tracklets[tid]
+                tr.time_since_update = 0  # age while in lost pool
                 self.lost_tracklets[tid] = tr
 
         unmatched_dets = set(range(len(detections))) - matched_dets
-        recovered_dets = self._recover_lost(detections, unmatched_dets, frame_idx)
+        recovered_dets = self._recover_lost(detections, unmatched_dets)
         unmatched_dets -= recovered_dets
+
+        # Age tracks that remain lost after this frame. They are deliberately
+        # kept only for a bounded recovery horizon.
+        for tr in self.lost_tracklets.values():
+            tr.time_since_update += 1
 
         for i in sorted(unmatched_dets):
             det = detections[i]
