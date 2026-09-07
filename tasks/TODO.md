@@ -55,7 +55,8 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 - [x] MQTT v1 topic/payload contract + validation tests.
 - [x] Paho MQTT adapter: TLS, LWT availability, QoS/retained policy, reconnect backoff, idempotent request_id handling.
 - [x] MQTT adapter unit tests.
-- [ ] MQTT broker integration test.
+- [x] Local Mosquitto integration harness + opt-in broker tests.
+- [ ] Execute MQTT broker integration test and capture result.
 - [ ] HTTP/WebSocket adapter tests.
 - [ ] Multi-camera device/session model.
 
