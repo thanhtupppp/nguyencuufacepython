@@ -27,6 +27,14 @@ Do not introduce FP16/INT8 until the FP32/FP baseline and accuracy threshold are
 - CPU utilization where available
 - embedding cosine parity against the reference PC CPU run
 
+The repository now provides `benchmarks/scripts/benchmark_onnx_runtime.py` for repeatable single-model runtime measurements. It records session creation, p50/p95/p99/mean latency, throughput, provider actually used, and model I/O metadata. It uses deterministic zero-valued inputs only for runtime timing; these numbers must never be presented as recognition accuracy.
+
+Example:
+
+`python benchmarks/scripts/benchmark_onnx_runtime.py --model /path/model.onnx --provider CPUExecutionProvider --warmup 20 --iterations 100 --out benchmarks/results/model_cpu.json`
+
+For a full recognition benchmark, use the real-model runner and real images so SCRFD detection, five-point alignment and ArcFace embedding semantics are measured together.
+
 ## Acceptance
 
 A device run is not considered comparable unless model SHA-256, preprocessing, input dimensions and output normalization match the reference.
