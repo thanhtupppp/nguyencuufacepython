@@ -28,6 +28,9 @@ _dispenser_config = {
     "voice_enabled": True,
     "voice_volume": 1.0,
     "voice_rate": 1.0,
+    "touchless_enabled": True,
+    "touchless_delay": 1.5,
+    "welcome_voice_enabled": True,
 }
 
 
@@ -41,6 +44,9 @@ class DispenserConfigModel(BaseModel):
     voice_enabled: bool = Field(default=True)
     voice_volume: float = Field(default=1.0, ge=0.0, le=1.0)
     voice_rate: float = Field(default=1.0, ge=0.5, le=2.0)
+    touchless_enabled: bool = Field(default=True)
+    touchless_delay: float = Field(default=1.5, ge=0.5, le=10.0)
+    welcome_voice_enabled: bool = Field(default=True)
 
 
 
@@ -347,7 +353,48 @@ async def update_dispenser_config(config: DispenserConfigModel) -> dict:
     _dispenser_config["voice_enabled"] = config.voice_enabled
     _dispenser_config["voice_volume"] = config.voice_volume
     _dispenser_config["voice_rate"] = config.voice_rate
+    _dispenser_config["touchless_enabled"] = config.touchless_enabled
+    _dispenser_config["touchless_delay"] = config.touchless_delay
+    _dispenser_config["welcome_voice_enabled"] = config.welcome_voice_enabled
     return {"status": "ok", "config": _dispenser_config}
+
+
+@router.post("/presence-check")
+async def check_presence(image: UploadFile = File(...)) -> dict:
+    """Fast presence check (<15ms) to detect if a face is in front of the kiosk camera."""
+    if recognition_pipeline is None:
+        raise HTTPException(status_code=503, detail="Recognition service is unavailable")
+
+    data = await image.read()
+    img_bgr = _decode_image(data)
+
+    try:
+        # Prefer fast direct SCRFD detector if available
+        if hasattr(recognition_pipeline, "detector") and recognition_pipeline.detector:
+            faces = recognition_pipeline.detector.detect(img_bgr)
+            if faces:
+                best = max(faces, key=lambda f: f.get("score", 0.0))
+                return {
+                    "face_detected": True,
+                    "confidence": float(best.get("score", 0.0)),
+                    "bbox": [float(v) for v in best.get("bbox", [])],
+                }
+        else:
+            best_face = recognition_pipeline.extract_best_face(img_bgr)
+            if best_face is not None:
+                return {
+                    "face_detected": True,
+                    "confidence": float(getattr(best_face, "detector_score", 0.95)),
+                    "bbox": [float(v) for v in getattr(best_face, "bbox", [])],
+                }
+    except Exception:
+        pass
+
+    return {
+        "face_detected": False,
+        "confidence": 0.0,
+        "bbox": None,
+    }
 
 
 TTS_CACHE_DIR = Path("data/tts_cache")

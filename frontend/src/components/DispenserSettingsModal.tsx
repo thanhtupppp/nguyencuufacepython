@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sliders, Clock, Timer, Cpu, Check, RefreshCw, MapPin, ScanFace, Volume2, VolumeX, Play } from 'lucide-react';
+import { X, Sliders, Clock, Timer, Cpu, Check, RefreshCw, MapPin, ScanFace, Volume2, VolumeX, Play, Hand, Zap } from 'lucide-react';
 import { DispenserConfig } from '../types';
 import { soundEffects } from '../utils/audio';
 
@@ -27,6 +27,9 @@ export const DispenserSettingsModal: React.FC<DispenserSettingsModalProps> = ({
   const [voiceEnabled, setVoiceEnabled] = useState<boolean>(config.voice_enabled ?? true);
   const [voiceVolume, setVoiceVolume] = useState<number>(config.voice_volume ?? 1.0);
   const [voiceRate, setVoiceRate] = useState<number>(config.voice_rate ?? 1.0);
+  const [touchlessEnabled, setTouchlessEnabled] = useState<boolean>(config.touchless_enabled ?? true);
+  const [touchlessDelay, setTouchlessDelay] = useState<number>(config.touchless_delay ?? 1.5);
+  const [welcomeVoiceEnabled, setWelcomeVoiceEnabled] = useState<boolean>(config.welcome_voice_enabled ?? true);
 
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
@@ -42,6 +45,9 @@ export const DispenserSettingsModal: React.FC<DispenserSettingsModalProps> = ({
     setVoiceEnabled(config.voice_enabled ?? true);
     setVoiceVolume(config.voice_volume ?? 1.0);
     setVoiceRate(config.voice_rate ?? 1.0);
+    setTouchlessEnabled(config.touchless_enabled ?? true);
+    setTouchlessDelay(config.touchless_delay ?? 1.5);
+    setWelcomeVoiceEnabled(config.welcome_voice_enabled ?? true);
   }, [config, isOpen]);
 
   if (!isOpen) return null;
@@ -56,6 +62,9 @@ export const DispenserSettingsModal: React.FC<DispenserSettingsModalProps> = ({
     setVoiceEnabled(true);
     setVoiceVolume(1.0);
     setVoiceRate(1.0);
+    setTouchlessEnabled(true);
+    setTouchlessDelay(1.5);
+    setWelcomeVoiceEnabled(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -72,6 +81,9 @@ export const DispenserSettingsModal: React.FC<DispenserSettingsModalProps> = ({
         voice_enabled: voiceEnabled,
         voice_volume: Number(voiceVolume),
         voice_rate: Number(voiceRate),
+        touchless_enabled: touchlessEnabled,
+        touchless_delay: Number(touchlessDelay),
+        welcome_voice_enabled: welcomeVoiceEnabled,
       });
       soundEffects.setVoiceConfig(voiceEnabled, voiceVolume, voiceRate);
       setSavedSuccess(true);
@@ -406,7 +418,91 @@ export const DispenserSettingsModal: React.FC<DispenserSettingsModalProps> = ({
 
           <div className="border-t border-slate-800/80" />
 
-          {/* SECTION 6: DEVICE INFO */}
+          {/* SECTION 6: SMART PRESENCE & TOUCHLESS MODE */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-200 uppercase tracking-wide flex items-center space-x-1.5">
+                <Zap className="w-4 h-4 text-emerald-400" />
+                <span>Cấp Giấy Tự Động Không Chạm (100% Touchless)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setTouchlessEnabled(!touchlessEnabled)}
+                className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold transition ${
+                  touchlessEnabled
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'bg-slate-800 text-slate-400'
+                }`}
+              >
+                <Hand className="w-3.5 h-3.5" />
+                <span>{touchlessEnabled ? 'TỰ ĐỘNG BẬT' : 'BẤM NÚT TAY'}</span>
+              </button>
+            </div>
+
+            {touchlessEnabled ? (
+              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-3 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-300">Thời gian giữ mặt trước khi nhả giấy:</span>
+                  <span className="text-xs font-mono font-bold text-emerald-400">
+                    {touchlessDelay} Giây
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { label: '1.0s (Nhanh)', val: 1.0 },
+                    { label: '1.5s (Chuẩn)', val: 1.5 },
+                    { label: '2.0s (Kỹ)', val: 2.0 },
+                    { label: '2.5s (Chậm)', val: 2.5 },
+                  ].map((item) => (
+                    <button
+                      key={item.val}
+                      type="button"
+                      onClick={() => setTouchlessDelay(item.val)}
+                      className={`py-1.5 rounded-lg text-xs font-medium border transition ${
+                        touchlessDelay === item.val
+                          ? 'bg-emerald-600 border-emerald-500 text-white'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Welcome Voice Greeting Toggle */}
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs text-slate-200 block font-medium">Giọng chào khi có người bước tới</span>
+                    <span className="text-[10px] text-slate-400">"Xin chào bạn! Vui lòng nhìn thẳng camera..."</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setWelcomeVoiceEnabled(!welcomeVoiceEnabled)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition ${
+                      welcomeVoiceEnabled
+                        ? 'bg-cyan-950 border-cyan-700 text-cyan-300'
+                        : 'bg-slate-900 border-slate-800 text-slate-500'
+                    }`}
+                  >
+                    {welcomeVoiceEnabled ? 'BẬT CHÀO' : 'TẮT'}
+                  </button>
+                </div>
+
+                <p className="text-[10px] text-slate-400 italic">
+                  💡 Người dùng chỉ cần đứng trước camera {touchlessDelay}s, AI sẽ tự động quét và nhả giấy mà không cần chạm tay vào màn hình.
+                </p>
+              </div>
+            ) : (
+              <p className="text-[11px] text-slate-400">
+                Ở chế độ bấm nút tay, người dùng cần chạm vào nút lớn <strong>"NHẬN GIẤY VỆ SINH"</strong> để kích hoạt camera nhả giấy.
+              </p>
+            )}
+          </div>
+
+          <div className="border-t border-slate-800/80" />
+
+          {/* SECTION 7: DEVICE INFO */}
           <div className="space-y-2">
             <label className="text-xs font-bold text-slate-200 uppercase tracking-wide flex items-center space-x-1.5">
               <MapPin className="w-4 h-4 text-cyan-400" />

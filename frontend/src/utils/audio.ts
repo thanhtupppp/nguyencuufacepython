@@ -315,6 +315,14 @@ class AudioController {
     }, 400);
   }
 
+  public announceWelcome() {
+    if (!this.voiceEnabled) return;
+    this.playAudioOrTTS(
+      '/audio/welcome_guide.mp3',
+      "Xin chào bạn! Vui lòng nhìn thẳng camera để nhận giấy vệ sinh."
+    );
+  }
+
   public testVoice() {
     this.playAudioOrTTS(
       '/audio/welcome_guide.mp3',

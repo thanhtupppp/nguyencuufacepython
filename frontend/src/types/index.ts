@@ -87,5 +87,14 @@ export interface DispenserConfig {
   voice_enabled?: boolean;
   voice_volume?: number;
   voice_rate?: number;
+  touchless_enabled?: boolean;
+  touchless_delay?: number;
+  welcome_voice_enabled?: boolean;
+}
+
+export interface PresenceResult {
+  face_detected: boolean;
+  confidence: number;
+  bbox?: [number, number, number, number] | null;
 }
 

@@ -14,8 +14,10 @@ import {
   RefreshCw,
   Sparkles,
   Settings,
+  Scan,
 } from 'lucide-react';
 import { DispenseResult } from '../types';
+import { checkPresence } from '../services/api';
 import { soundEffects } from '../utils/audio';
 import { FaceViewfinder, ViewfinderStyle } from './FaceViewfinder';
 
@@ -35,6 +37,9 @@ interface DispenserKioskProps {
   voiceEnabled?: boolean;
   voiceVolume?: number;
   voiceRate?: number;
+  touchlessEnabled?: boolean;
+  touchlessDelay?: number;
+  welcomeVoiceEnabled?: boolean;
 }
 
 export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
@@ -53,13 +58,33 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
   voiceEnabled = true,
   voiceVolume = 1.0,
   voiceRate = 1.0,
+  touchlessEnabled = true,
+  touchlessDelay = 1.5,
+  welcomeVoiceEnabled = true,
 }) => {
   const [result, setResult] = useState<DispenseResult | null>(null);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(voiceEnabled);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [countdownRemaining, setCountdownRemaining] = useState<number>(0);
   const [autoDismissSeconds, setAutoDismissSeconds] = useState<number>(0);
+
+  // Smart Presence & Touchless State
+  const [isIdle, setIsIdle] = useState<boolean>(true);
+  const [presenceDetected, setPresenceDetected] = useState<boolean>(false);
+  const [touchlessCountdown, setTouchlessCountdown] = useState<number>(0);
+  const [isDebouncing, setIsDebouncing] = useState<boolean>(false);
+
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isCheckingPresenceRef = useRef<boolean>(false);
+  const lastPresenceTimeRef = useRef<number>(0);
+  const hasGreetedRef = useRef<boolean>(false);
+  const isProcessingRef = useRef<boolean>(isProcessing);
+  const isDebouncingRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    isProcessingRef.current = isProcessing;
+  }, [isProcessing]);
 
   // Sync audio/voice config with soundEffects controller
   useEffect(() => {
@@ -67,9 +92,28 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
     soundEffects.setVoiceConfig(soundEnabled && voiceEnabled, voiceVolume, voiceRate);
   }, [soundEnabled, voiceEnabled, voiceVolume, voiceRate]);
 
+  // Offscreen fast frame capture (320x240 for <15ms SCRFD presence checking)
+  const captureSmallFrame = (): Promise<Blob | null> => {
+    if (!videoRef.current || videoRef.current.readyState < 2) return Promise.resolve(null);
+    const video = videoRef.current;
+    if (!offscreenCanvasRef.current) {
+      offscreenCanvasRef.current = document.createElement('canvas');
+      offscreenCanvasRef.current.width = 320;
+      offscreenCanvasRef.current.height = 240;
+    }
+    const canvas = offscreenCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return Promise.resolve(null);
+    ctx.drawImage(video, 0, 0, 320, 240);
+    return new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.65);
+    });
+  };
+
   // Trigger paper request
   const handleDispenseClick = async () => {
     if (isProcessing) return;
+    setTouchlessCountdown(0);
     setResult(null);
 
     const res = await onRequestPaper(cooldownMinutes);
@@ -77,6 +121,15 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
 
     setResult(res);
     setAutoDismissSeconds(3);
+
+    // Cooldown debounce (6s) so person can gather paper and step away without re-triggering
+    setIsDebouncing(true);
+    isDebouncingRef.current = true;
+    setTimeout(() => {
+      setIsDebouncing(false);
+      isDebouncingRef.current = false;
+      hasGreetedRef.current = false;
+    }, 6000);
 
     if (res.granted) {
       if (soundEnabled) {
@@ -103,6 +156,96 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
       }
     }
   };
+
+  // Smart Presence Check Loop (Runs every 750ms when camera is active)
+  useEffect(() => {
+    if (!isActive || !isStreaming) {
+      setIsIdle(true);
+      setPresenceDetected(false);
+      setTouchlessCountdown(0);
+      return;
+    }
+
+    const interval = setInterval(async () => {
+      if (
+        isProcessingRef.current ||
+        isDebouncingRef.current ||
+        isCheckingPresenceRef.current ||
+        result !== null ||
+        countdownRemaining > 0
+      ) {
+        return;
+      }
+
+      try {
+        isCheckingPresenceRef.current = true;
+        const blob = await captureSmallFrame();
+        if (!blob) return;
+
+        const pres = await checkPresence(blob);
+        if (pres.face_detected) {
+          lastPresenceTimeRef.current = Date.now();
+          setIsIdle(false);
+          setPresenceDetected(true);
+
+          // Welcome greeting when someone walks up
+          if (welcomeVoiceEnabled && soundEnabled && !hasGreetedRef.current) {
+            hasGreetedRef.current = true;
+            soundEffects.announceWelcome();
+          }
+
+          // Trigger touchless countdown if enabled and not already running
+          if (touchlessEnabled && touchlessCountdown <= 0 && !isProcessingRef.current) {
+            setTouchlessCountdown(touchlessDelay);
+          }
+        } else {
+          setPresenceDetected(false);
+          // If person steps away, cancel countdown immediately
+          setTouchlessCountdown(0);
+
+          // Return to idle sleep mode after 3.5s of empty camera view
+          if (Date.now() - lastPresenceTimeRef.current > 3500) {
+            setIsIdle(true);
+            hasGreetedRef.current = false;
+          }
+        }
+      } catch {
+        // Background polling errors ignored
+      } finally {
+        isCheckingPresenceRef.current = false;
+      }
+    }, 750);
+
+    return () => clearInterval(interval);
+  }, [
+    isActive,
+    isStreaming,
+    result,
+    countdownRemaining,
+    touchlessEnabled,
+    touchlessDelay,
+    welcomeVoiceEnabled,
+    soundEnabled,
+    touchlessCountdown,
+  ]);
+
+  // Touchless Auto-Dispense live countdown
+  useEffect(() => {
+    if (!touchlessEnabled || touchlessCountdown <= 0 || isProcessing || isDebouncing) return;
+
+    const timer = setInterval(() => {
+      setTouchlessCountdown((prev) => {
+        if (prev <= 0.15) {
+          clearInterval(timer);
+          handleDispenseClick();
+          return 0;
+        }
+        return Number((prev - 0.1).toFixed(1));
+      });
+    }, 100);
+
+    return () => clearInterval(timer);
+  }, [touchlessEnabled, touchlessCountdown, isProcessing, isDebouncing]);
 
   // Cooldown timer live countdown
   useEffect(() => {
@@ -236,6 +379,10 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
               isStreaming={isStreaming}
               isProcessing={isProcessing}
               style={viewfinderStyle}
+              isIdle={isIdle}
+              presenceDetected={presenceDetected}
+              touchlessCountdown={touchlessCountdown}
+              touchlessTotal={touchlessDelay}
             />
           </>
         ) : (
@@ -423,13 +570,27 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
           className={`w-full py-4 px-8 rounded-2xl font-bold text-base sm:text-lg tracking-wide uppercase flex items-center justify-center space-x-3 transition-all transform shadow-2xl ${
             !isActive || isProcessing
               ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
-              : 'bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:via-blue-500 hover:to-indigo-500 text-white border-2 border-cyan-400/40 shadow-cyan-500/30 hover:scale-[1.02] active:scale-95 animate-pulse-fast'
+              : touchlessEnabled && touchlessCountdown > 0
+              ? 'bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-600 text-white border-2 border-emerald-400 shadow-emerald-500/30 scale-[1.02] animate-pulse'
+              : isIdle
+              ? 'bg-gradient-to-r from-slate-800 via-slate-850 to-slate-900 hover:from-cyan-900 hover:to-blue-900 text-slate-300 border border-slate-700 hover:border-cyan-500/50'
+              : 'bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:via-blue-500 hover:to-indigo-500 text-white border-2 border-cyan-400/40 shadow-cyan-500/30 hover:scale-[1.02] active:scale-95'
           }`}
         >
           {isProcessing ? (
             <>
               <RefreshCw className="w-6 h-6 animate-spin text-white" />
               <span>Đang phân tích khuôn mặt...</span>
+            </>
+          ) : touchlessEnabled && touchlessCountdown > 0 ? (
+            <>
+              <Scan className="w-6 h-6 animate-spin text-emerald-200" />
+              <div className="flex flex-col items-center">
+                <span>TỰ ĐỘNG CẤP GIẤY: {touchlessCountdown.toFixed(1)}s</span>
+                <span className="text-[10px] font-normal lowercase tracking-normal opacity-90 text-emerald-100">
+                  (nhấp để lấy ngay)
+                </span>
+              </div>
             </>
           ) : (
             <>
@@ -441,7 +602,15 @@ export const DispenserKiosk: React.FC<DispenserKioskProps> = ({
         </button>
 
         <p className="text-[11px] text-slate-400 mt-2 text-center">
-          💡 <strong>Hướng dẫn:</strong> Nhìn thẳng vào camera và chạm vào nút trên. Hệ thống sẽ tự động xác thực và nhả giấy!
+          {touchlessEnabled ? (
+            <>
+              💡 <strong>Chế độ Không Chạm (Touchless):</strong> Đứng trước camera {touchlessDelay}s máy sẽ tự động cấp giấy, hoặc chạm nút để lấy ngay!
+            </>
+          ) : (
+            <>
+              💡 <strong>Hướng dẫn:</strong> Nhìn thẳng vào camera và chạm vào nút trên. Hệ thống sẽ tự động xác thực và nhả giấy!
+            </>
+          )}
         </p>
       </div>
 

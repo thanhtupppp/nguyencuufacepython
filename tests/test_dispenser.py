@@ -252,6 +252,9 @@ def test_dispenser_config_get_and_update():
             "voice_enabled": True,
             "voice_volume": 0.9,
             "voice_rate": 1.1,
+            "touchless_enabled": True,
+            "touchless_delay": 2.0,
+            "welcome_voice_enabled": True,
         },
     )
     assert res2.status_code == 200
@@ -262,6 +265,9 @@ def test_dispenser_config_get_and_update():
     assert cfg2["voice_enabled"] is True
     assert cfg2["voice_volume"] == 0.9
     assert cfg2["voice_rate"] == 1.1
+    assert cfg2["touchless_enabled"] is True
+    assert cfg2["touchless_delay"] == 2.0
+    assert cfg2["welcome_voice_enabled"] is True
 
 
 def test_dispenser_tts_endpoint():
@@ -269,4 +275,39 @@ def test_dispenser_tts_endpoint():
     assert res.status_code == 200
     assert res.headers["content-type"] == "audio/mpeg"
     assert len(res.content) > 0
+
+
+def test_dispenser_presence_check(monkeypatch):
+    from src.api.routes import dispenser as dispenser_module
+    from unittest.mock import MagicMock
+
+    # 1. Mock detector finding a face
+    mock_pipe = MagicMock()
+    mock_pipe.detector.detect.return_value = [
+        {"bbox": [20, 20, 100, 100], "score": 0.98}
+    ]
+    monkeypatch.setattr(dispenser_module, "recognition_pipeline", mock_pipe)
+
+    jpeg = _make_dummy_jpeg()
+    res1 = client.post(
+        "/api/v1/dispenser/presence-check",
+        files={"image": ("frame.jpg", jpeg, "image/jpeg")},
+    )
+    assert res1.status_code == 200
+    data1 = res1.json()
+    assert data1["face_detected"] is True
+    assert data1["confidence"] == 0.98
+    assert len(data1["bbox"]) == 4
+
+    # 2. Mock detector finding no faces
+    mock_pipe.detector.detect.return_value = []
+    res2 = client.post(
+        "/api/v1/dispenser/presence-check",
+        files={"image": ("frame.jpg", jpeg, "image/jpeg")},
+    )
+    assert res2.status_code == 200
+    data2 = res2.json()
+    assert data2["face_detected"] is False
+    assert data2["confidence"] == 0.0
+    assert data2["bbox"] is None
 

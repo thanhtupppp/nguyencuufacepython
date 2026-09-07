@@ -302,6 +302,9 @@ export function App() {
                 voiceEnabled={dispenserConfig.voice_enabled ?? true}
                 voiceVolume={dispenserConfig.voice_volume ?? 1.0}
                 voiceRate={dispenserConfig.voice_rate ?? 1.0}
+                touchlessEnabled={dispenserConfig.touchless_enabled ?? true}
+                touchlessDelay={dispenserConfig.touchless_delay ?? 1.5}
+                welcomeVoiceEnabled={dispenserConfig.welcome_voice_enabled ?? true}
               />
             </div>
 

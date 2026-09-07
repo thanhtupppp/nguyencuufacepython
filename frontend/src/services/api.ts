@@ -1,4 +1,4 @@
-import { Person, RecognitionResult, DispenseResult, DispenserStats, DispenseLog, DispenserConfig } from '../types';
+import { Person, RecognitionResult, DispenseResult, DispenserStats, DispenseLog, DispenserConfig, PresenceResult } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -148,6 +148,18 @@ export async function updateDispenserConfig(config: DispenserConfig): Promise<Di
   if (!res.ok) throw new Error('Không thể lưu cấu hình máy cấp giấy');
   const data = await res.json();
   return data.config;
+}
+
+export async function checkPresence(imageBlob: Blob): Promise<PresenceResult> {
+  const formData = new FormData();
+  formData.append('image', imageBlob, 'frame.jpg');
+
+  const res = await fetch(`${API_BASE}/api/v1/dispenser/presence-check`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) throw new Error('Không thể kiểm tra hiện diện khuôn mặt');
+  return res.json();
 }
 
 
