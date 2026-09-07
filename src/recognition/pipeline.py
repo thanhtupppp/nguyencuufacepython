@@ -1,9 +1,9 @@
 """End-to-end single-image recognition pipeline.
 
-The pipeline is intentionally model-asset agnostic: callers provide configured
-SCRFD and ArcFace ONNX components. It enforces the production order
-SCRFD -> quality gate -> 5-point alignment -> ArcFace embedding and returns
-metadata needed by enrollment/recognition APIs.
+Production order:
+SCRFD -> quality gate -> optional liveness gate -> 5-point alignment -> ArcFace.
+The liveness gate is fail-closed when configured and never substitutes a heuristic
+for a missing anti-spoofing model in strict mode.
 """
 
 from dataclasses import dataclass
@@ -14,6 +14,7 @@ import numpy as np
 from src.alignment.aligner import FaceAligner
 from src.detection.scrfd import SCRFDDetector
 from src.quality.quality_gate import FaceQualityGate
+from src.anti_spoofing.liveness import AntiSpoofDetector, LivenessDecision
 from .base import BaseFaceRecognizer
 
 
@@ -25,6 +26,8 @@ class FaceEmbeddingResult:
     bbox: list[float]
     landmarks: np.ndarray
     detector_score: float
+    liveness_decision: str = "NOT_CONFIGURED"
+    liveness_score: Optional[float] = None
 
 
 class RecognitionPipeline:
@@ -34,20 +37,19 @@ class RecognitionPipeline:
         recognizer: BaseFaceRecognizer,
         aligner: Optional[FaceAligner] = None,
         quality_gate: Optional[FaceQualityGate] = None,
+        liveness: Optional[AntiSpoofDetector] = None,
     ):
         self.detector = detector
         self.recognizer = recognizer
         self.aligner = aligner or FaceAligner()
         self.quality_gate = quality_gate or FaceQualityGate()
+        self.liveness = liveness
 
     def extract_best_face(self, image: np.ndarray) -> FaceEmbeddingResult:
         detections = self.detector.detect(image)
         if not detections:
             raise ValueError("NO_FACE_DETECTED")
 
-        # For single-person enrollment/recognition, choose the highest detector
-        # confidence among valid quality candidates. Multi-face workflows should
-        # call detect() and process each detection explicitly.
         candidates = []
         last_rejections = []
         for detection in detections:
@@ -70,6 +72,18 @@ class RecognitionPipeline:
             raise ValueError("NO_FACE_PASSED_QUALITY_GATE")
 
         _, detection, quality = max(candidates, key=lambda item: item[0])
+
+        liveness_decision = "NOT_CONFIGURED"
+        liveness_score = None
+        if self.liveness is not None:
+            live = self.liveness.predict_liveness(image, detection["bbox"])
+            liveness_decision = live.decision.value
+            liveness_score = live.liveness_score
+            if live.decision is LivenessDecision.FAIL:
+                raise ValueError(live.attack_type or "SPOOF_DETECTED")
+            if live.decision is LivenessDecision.INCONCLUSIVE:
+                raise ValueError(live.reason or "LIVENESS_INCONCLUSIVE")
+
         aligned, _ = self.aligner.align(
             image, np.asarray(detection["landmarks"], dtype=np.float32)
         )
@@ -89,4 +103,6 @@ class RecognitionPipeline:
             bbox=list(detection["bbox"]),
             landmarks=np.asarray(detection["landmarks"], dtype=np.float32),
             detector_score=float(detection["score"]),
+            liveness_decision=liveness_decision,
+            liveness_score=liveness_score,
         )
