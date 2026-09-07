@@ -19,19 +19,60 @@ export function useCamera() {
     setIsStreaming(false);
   }, []);
 
+  const parseCameraError = (err: any): string => {
+    const name = err?.name || '';
+    if (name === 'NotReadableError' || name === 'TrackStartError') {
+      return 'Camera đang bị ứng dụng khác chiếm dụng (ví dụ: scripts/webcam_demo.py hoặc phần mềm khác). Vui lòng đóng ứng dụng đang dùng camera và bấm lại "Bật Camera"!';
+    }
+    if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+      return 'Trình duyệt bị chặn quyền Camera. Vui lòng bấm vào biểu tượng Ổ Khóa (hoặc icon Camera) cạnh thanh địa chỉ URL -> Chọn "Cho phép (Allow)" rồi tải lại trang.';
+    }
+    if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+      return 'Không tìm thấy thiết bị Camera nào được cắm vào máy tính.';
+    }
+    if (name === 'OverconstrainedError') {
+      return 'Camera không hỗ trợ độ phân giải yêu cầu. Đang thử chế độ cơ bản...';
+    }
+    return err?.message || 'Không thể truy cập camera. Vui lòng kiểm tra quyền và thiết bị!';
+  };
+
   const startCamera = useCallback(async (deviceId?: string) => {
     stopCamera();
     setError(null);
 
+    let stream: MediaStream | null = null;
+
+    // 1. First attempt with ideal HD resolution
     try {
       const constraints: MediaStreamConstraints = {
         video: deviceId
           ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
-          : { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+          : { width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
       };
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (primaryErr: any) {
+      // 2. Fallback attempt: if overconstrained or specific mode failed, try basic { video: true }
+      if (primaryErr?.name === 'OverconstrainedError' || primaryErr?.name === 'ConstraintNotSatisfiedError') {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        } catch (fallbackErr: any) {
+          setError(parseCameraError(fallbackErr));
+          setIsActive(false);
+          setIsStreaming(false);
+          return;
+        }
+      } else {
+        setError(parseCameraError(primaryErr));
+        setIsActive(false);
+        setIsStreaming(false);
+        return;
+      }
+    }
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    if (!stream) return;
+
+    try {
       streamRef.current = stream;
 
       if (videoRef.current) {
@@ -43,8 +84,7 @@ export function useCamera() {
       }
       setIsActive(true);
     } catch (err: any) {
-      const errMsg = err?.message || 'Không thể truy cập camera. Vui lòng cấp quyền!';
-      setError(errMsg);
+      setError(parseCameraError(err));
       setIsActive(false);
       setIsStreaming(false);
     }

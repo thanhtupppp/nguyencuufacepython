@@ -34,18 +34,31 @@ export const EnrollModal: React.FC<EnrollModalProps> = ({ isOpen, onClose, onSuc
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
-        audio: false,
-      });
+      let stream: MediaStream | null = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false,
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
+
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play().catch(() => {});
       }
       setIsCameraActive(true);
-    } catch {
-      setErrorMsg('Không thể mở camera. Bạn có thể chọn cách Tải ảnh lên.');
+    } catch (err: any) {
+      const name = err?.name || '';
+      if (name === 'NotReadableError' || name === 'TrackStartError') {
+        setErrorMsg('Camera đang bị ứng dụng khác sử dụng (ví dụ scripts/webcam_demo.py). Vui lòng đóng ứng dụng đó!');
+      } else if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setErrorMsg('Trình duyệt chưa được cấp quyền Camera. Hãy bấm icon Ổ khóa trên thanh địa chỉ URL để Cho phép.');
+      } else {
+        setErrorMsg('Không thể mở camera. Bạn có thể chọn cách "Tải file ảnh".');
+      }
     }
   };
 
