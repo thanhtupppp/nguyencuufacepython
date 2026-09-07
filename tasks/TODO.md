@@ -52,6 +52,7 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 - [x] Model registry + fail-closed pipeline.
 - [x] WebSocket `/ws/v1/events`.
 - [x] Strict liveness integration.
+- [x] API contract tests với fake pipeline/database.
 - [ ] E2E integration test với PostgreSQL/pgvector + licensed assets.
 
 ### P1.3 Multi-device — PARTIAL
