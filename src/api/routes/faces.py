@@ -5,7 +5,7 @@ from typing import Optional
 import numpy as np
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from src.api.dependencies import db
+from src.api.dependencies import db, recognition_pipeline
 
 router = APIRouter()
 
@@ -20,14 +20,21 @@ def _decode_image(data: bytes) -> np.ndarray:
 
 
 def _extract_embedding(image: np.ndarray) -> tuple[np.ndarray, str, float]:
-    """Production hook: SCRFD -> 5-point alignment -> ArcFace.
-
-    Refuses to fabricate an embedding until a real model registry is wired in.
-    """
-    raise HTTPException(
-        status_code=503,
-        detail="Recognition model is not configured; install/configure SCRFD + ArcFace ONNX assets.",
-    )
+    """Run SCRFD -> quality gate -> alignment -> ArcFace."""
+    if recognition_pipeline is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Recognition model is not configured; install/configure SCRFD + ArcFace ONNX assets and SHA-256.",
+        )
+    try:
+        result = recognition_pipeline.extract_best_face(image)
+    except ValueError as exc:
+        code = str(exc)
+        status = 422 if code in {"NO_FACE_DETECTED", "NO_FACE_PASSED_QUALITY_GATE"} else 503
+        raise HTTPException(status_code=status, detail=code) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Recognition runtime unavailable") from exc
+    return result.embedding, result.model_version, result.quality_score
 
 
 @router.post("/enroll", status_code=201)
