@@ -5,6 +5,7 @@ Includes transparent in-memory fallback for testing and development environments
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 import json
 import logging
 from pathlib import Path
@@ -68,6 +69,7 @@ class DatabaseClient:
         self._mem_persons: dict[str, dict[str, Any]] = {}
         self._mem_embeddings: list[dict[str, Any]] = []
         self._mem_logs: list[dict[str, Any]] = []
+        self._mem_dispense_logs: list[dict[str, Any]] = []
 
         if self.use_sqlite:
             self._init_sqlite()
@@ -114,6 +116,18 @@ class DatabaseClient:
             status TEXT,
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS dispense_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            person_id TEXT NOT NULL,
+            device_id TEXT DEFAULT 'dispenser_01',
+            status TEXT NOT NULL,
+            similarity REAL DEFAULT 0.0,
+            cooldown_seconds_remaining INTEGER DEFAULT 0,
+            message TEXT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_dispense_person ON dispense_logs(person_id, timestamp DESC);
         """)
         self._sqlite_conn.commit()
 
@@ -589,3 +603,189 @@ class DatabaseClient:
         """
         with self._conn.cursor() as cur:
             cur.execute(sql, (person_id, device_id, similarity, margin, status))
+
+    # -------------------------------------------------------------
+    # Smart Toilet Paper Dispenser Methods & Anti-Abuse Cooldown
+    # -------------------------------------------------------------
+
+    def get_last_successful_dispense(self, person_id: str) -> Optional[datetime]:
+        """
+        Retrieves the most recent successful dispense timestamp for a person.
+        Considers status 'GRANTED' and 'NEW_USER_GRANTED'.
+        """
+        if self.use_sqlite and self._sqlite_conn:
+            cur = self._sqlite_conn.cursor()
+            cur.execute(
+                """
+                SELECT timestamp FROM dispense_logs
+                WHERE person_id = ? AND status IN ('GRANTED', 'NEW_USER_GRANTED')
+                ORDER BY id DESC LIMIT 1;
+                """,
+                (person_id,),
+            )
+            row = cur.fetchone()
+            if row and row[0]:
+                ts_val = row[0]
+                if isinstance(ts_val, datetime):
+                    return ts_val
+                try:
+                    return datetime.fromisoformat(str(ts_val).replace(" ", "T"))
+                except Exception:
+                    return datetime.strptime(str(ts_val), "%Y-%m-%d %H:%M:%S")
+            return None
+
+        if self.use_memory:
+            for item in reversed(self._mem_dispense_logs):
+                if item["person_id"] == person_id and item["status"] in ("GRANTED", "NEW_USER_GRANTED"):
+                    ts = item["timestamp"]
+                    if isinstance(ts, datetime):
+                        return ts
+                    return datetime.fromisoformat(str(ts).replace(" ", "T"))
+            return None
+
+        # PostgreSQL
+        sql = """
+        SELECT timestamp FROM dispense_logs
+        WHERE person_id = %s AND status IN ('GRANTED', 'NEW_USER_GRANTED')
+        ORDER BY id DESC LIMIT 1;
+        """
+        with self._conn.cursor() as cur:
+            cur.execute(sql, (person_id,))
+            row = cur.fetchone()
+            if row and row[0]:
+                return row[0]
+        return None
+
+    def log_dispense(
+        self,
+        person_id: str,
+        status: str,
+        device_id: str = "dispenser_01",
+        similarity: float = 0.0,
+        cooldown_seconds_remaining: int = 0,
+        message: str = "",
+        timestamp: Optional[datetime] = None,
+    ) -> dict[str, Any]:
+        """
+        Records a toilet paper dispense attempt (granted or blocked by cooldown).
+        """
+        now = timestamp or datetime.now(timezone.utc)
+        now_str = now.isoformat()
+
+        record = {
+            "person_id": person_id,
+            "device_id": device_id,
+            "status": status,
+            "similarity": similarity,
+            "cooldown_seconds_remaining": cooldown_seconds_remaining,
+            "message": message,
+            "timestamp": now_str,
+        }
+
+        if self.use_sqlite and self._sqlite_conn:
+            with self._sqlite_conn:
+                self._sqlite_conn.execute(
+                    """
+                    INSERT INTO dispense_logs
+                    (person_id, device_id, status, similarity, cooldown_seconds_remaining, message, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?);
+                    """,
+                    (person_id, device_id, status, similarity, cooldown_seconds_remaining, message, now_str),
+                )
+            return record
+
+        if self.use_memory:
+            self._mem_dispense_logs.append(record)
+            return record
+
+        # PostgreSQL
+        sql = """
+        INSERT INTO dispense_logs
+        (person_id, device_id, status, similarity, cooldown_seconds_remaining, message, timestamp)
+        VALUES (%s, %s, %s, %s, %s, %s, %s);
+        """
+        with self._conn.cursor() as cur:
+            cur.execute(sql, (person_id, device_id, status, similarity, cooldown_seconds_remaining, message, now))
+        return record
+
+    def get_dispense_stats(self, device_id: Optional[str] = None) -> dict[str, Any]:
+        """
+        Returns summary statistics for the smart toilet paper dispenser.
+        """
+        if self.use_sqlite and self._sqlite_conn:
+            cur = self._sqlite_conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM dispense_logs WHERE status IN ('GRANTED', 'NEW_USER_GRANTED');")
+            total_granted = cur.fetchone()[0]
+
+            cur.execute("SELECT COUNT(*) FROM dispense_logs WHERE status = 'COOLDOWN_BLOCKED';")
+            total_blocked = cur.fetchone()[0]
+
+            cur.execute("SELECT COUNT(DISTINCT person_id) FROM dispense_logs WHERE status IN ('GRANTED', 'NEW_USER_GRANTED');")
+            unique_users = cur.fetchone()[0]
+
+            cur.execute("SELECT timestamp FROM dispense_logs WHERE status IN ('GRANTED', 'NEW_USER_GRANTED') ORDER BY id DESC LIMIT 1;")
+            last_row = cur.fetchone()
+            last_dispensed_at = last_row[0] if last_row else None
+
+            return {
+                "total_granted": total_granted,
+                "total_blocked": total_blocked,
+                "unique_users": unique_users,
+                "last_dispensed_at": last_dispensed_at,
+            }
+
+        if self.use_memory:
+            granted = [l for l in self._mem_dispense_logs if l["status"] in ("GRANTED", "NEW_USER_GRANTED")]
+            blocked = [l for l in self._mem_dispense_logs if l["status"] == "COOLDOWN_BLOCKED"]
+            unique = len({l["person_id"] for l in granted})
+            return {
+                "total_granted": len(granted),
+                "total_blocked": len(blocked),
+                "unique_users": unique,
+                "last_dispensed_at": granted[-1]["timestamp"] if granted else None,
+            }
+
+        return {
+            "total_granted": 0,
+            "total_blocked": 0,
+            "unique_users": 0,
+            "last_dispensed_at": None,
+        }
+
+    def get_dispense_logs(self, limit: int = 50) -> list[dict[str, Any]]:
+        """
+        Returns the latest dispense logs.
+        """
+        if self.use_sqlite and self._sqlite_conn:
+            cur = self._sqlite_conn.cursor()
+            cur.execute(
+                """
+                SELECT l.id, l.person_id, p.name, l.device_id, l.status, l.similarity,
+                       l.cooldown_seconds_remaining, l.message, l.timestamp
+                FROM dispense_logs l
+                LEFT JOIN persons p ON l.person_id = p.person_id
+                ORDER BY l.id DESC LIMIT ?;
+                """,
+                (limit,),
+            )
+            rows = cur.fetchall()
+            return [
+                {
+                    "id": r[0],
+                    "person_id": r[1],
+                    "name": r[2] or r[1],
+                    "device_id": r[3],
+                    "status": r[4],
+                    "similarity": r[5],
+                    "cooldown_seconds_remaining": r[6],
+                    "message": r[7],
+                    "timestamp": r[8],
+                }
+                for r in rows
+            ]
+
+        if self.use_memory:
+            return list(reversed(self._mem_dispense_logs[-limit:]))
+
+        return []
+

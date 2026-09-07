@@ -5,13 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from .routes.persons import router as persons_router
 from .routes.faces import router as faces_router
 from .routes.events import router as events_router
+from .routes.dispenser import router as dispenser_router
 
 
 def create_app() -> FastAPI:
     app = FastAPI(
         title="NguyenCuuFacePython - Recognition Backend & Event Hub",
         version="1.2.0",
-        description="Production Face Recognition Backend: Identity Management, 1:N Recognition, 1:1 Verification, and Real-time WebSocket Event Stream.",
+        description="Production Face Recognition Backend: Identity Management, 1:N Recognition, 1:1 Verification, Real-time WebSocket Event Stream, and Smart Anti-Abuse Dispenser.",
     )
 
     # Enable CORS for web dashboards and mobile clients
@@ -26,6 +27,7 @@ def create_app() -> FastAPI:
 
     app.include_router(persons_router, prefix="/api/v1/persons", tags=["persons"])
     app.include_router(faces_router, prefix="/api/v1/faces", tags=["faces"])
+    app.include_router(dispenser_router, prefix="/api/v1/dispenser", tags=["dispenser"])
     app.include_router(events_router, tags=["events"])
 
     @app.get("/healthz", tags=["health"])

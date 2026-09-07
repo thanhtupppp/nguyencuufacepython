@@ -1,4 +1,4 @@
-import { Person, RecognitionResult } from '../types';
+import { Person, RecognitionResult, DispenseResult, DispenserStats, DispenseLog } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -97,3 +97,39 @@ export async function recognizeFace(
   }
   return res.json();
 }
+
+export async function requestToiletPaper(
+  imageBlob: Blob,
+  cooldownMinutes: number = 5.0,
+  deviceId: string = 'dispenser_01'
+): Promise<DispenseResult> {
+  const formData = new FormData();
+  formData.append('image', imageBlob, 'user_face.jpg');
+  formData.append('cooldown_minutes', cooldownMinutes.toString());
+  formData.append('device_id', deviceId);
+
+  const res = await fetch(`${API_BASE}/api/v1/dispenser/request-paper`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Lỗi khi yêu cầu cấp giấy' }));
+    throw new Error(err.detail || 'Lỗi khi yêu cầu cấp giấy');
+  }
+  return res.json();
+}
+
+export async function fetchDispenserStats(deviceId?: string): Promise<DispenserStats> {
+  const query = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : '';
+  const res = await fetch(`${API_BASE}/api/v1/dispenser/stats${query}`);
+  if (!res.ok) throw new Error('Không thể tải dữ liệu thống kê máy cấp giấy');
+  return res.json();
+}
+
+export async function fetchDispenserLogs(limit: number = 50): Promise<DispenseLog[]> {
+  const res = await fetch(`${API_BASE}/api/v1/dispenser/logs?limit=${limit}`);
+  if (!res.ok) throw new Error('Không thể tải nhật ký cấp giấy');
+  return res.json();
+}
+
