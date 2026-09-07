@@ -1,8 +1,9 @@
 """
-Multi-Object Multi-Frame Face Tracking and Temporal Voting Engine.
-Associates face detections across video frames to form Tracklets,
-selects the best-quality frame within each tracklet, and performs
-temporal consensus voting over a sliding window to eliminate spurious false matches.
+Multi-object multi-frame face tracking and temporal identity fusion.
+
+Associates face detections across frames using geometry plus optional face
+embedding appearance similarity, keeps short-lived lost tracks for recovery,
+and performs quality/similarity-weighted temporal consensus.
 """
 
 from dataclasses import dataclass, field
@@ -12,19 +13,16 @@ from scipy.optimize import linear_sum_assignment
 
 
 def compute_iou(box1: list[float] | np.ndarray, box2: list[float] | np.ndarray) -> float:
-    """Computes Intersection over Union (IoU) between two [x1, y1, x2, y2] bboxes."""
+    """Computes IoU between two [x1, y1, x2, y2] bounding boxes."""
     x1 = max(float(box1[0]), float(box2[0]))
     y1 = max(float(box1[1]), float(box2[1]))
     x2 = min(float(box1[2]), float(box2[2]))
     y2 = min(float(box1[3]), float(box2[3]))
-
     inter_w = max(0.0, x2 - x1)
     inter_h = max(0.0, y2 - y1)
     inter_area = inter_w * inter_h
-
     area1 = max(0.0, float(box1[2]) - float(box1[0])) * max(0.0, float(box1[3]) - float(box1[1]))
     area2 = max(0.0, float(box2[2]) - float(box2[0])) * max(0.0, float(box2[3]) - float(box2[1]))
-
     union_area = area1 + area2 - inter_area
     if union_area <= 1e-6:
         return 0.0
@@ -32,33 +30,40 @@ def compute_iou(box1: list[float] | np.ndarray, box2: list[float] | np.ndarray) 
 
 
 def compute_iou_matrix(boxes1: list[list[float]], boxes2: list[list[float]]) -> np.ndarray:
-    """Computes pairwise IoU matrix of shape (len(boxes1), len(boxes2))."""
-    n1 = len(boxes1)
-    n2 = len(boxes2)
+    """Computes pairwise IoU matrix."""
+    n1, n2 = len(boxes1), len(boxes2)
     if n1 == 0 or n2 == 0:
         return np.zeros((n1, n2), dtype=np.float32)
+    return np.asarray([[compute_iou(a, b) for b in boxes2] for a in boxes1], dtype=np.float32)
 
-    iou_mat = np.zeros((n1, n2), dtype=np.float32)
-    for i in range(n1):
-        for j in range(n2):
-            iou_mat[i, j] = compute_iou(boxes1[i], boxes2[j])
-    return iou_mat
+
+def cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
+    """Cosine similarity with safe handling for invalid/zero vectors."""
+    a = np.asarray(vec1, dtype=np.float32).reshape(-1)
+    b = np.asarray(vec2, dtype=np.float32).reshape(-1)
+    if a.shape != b.shape or a.size == 0:
+        return -1.0
+    na, nb = np.linalg.norm(a), np.linalg.norm(b)
+    if na <= 1e-8 or nb <= 1e-8:
+        return -1.0
+    return float(np.dot(a, b) / (na * nb))
 
 
 @dataclass
 class DetectionItem:
     """A face detection observation in a single frame."""
     frame_idx: int
-    bbox: list[float]                     # [x1, y1, x2, y2]
-    score: float                          # Detection confidence
-    landmarks: Optional[np.ndarray] = None # (5, 2)
-    quality_score: float = 1.0            # Quality Gate score [0.0, 1.0]
-    aligned_face: Optional[np.ndarray] = None # 112x112 aligned image
-    embedding: Optional[np.ndarray] = None    # 512D vector
-    predicted_id: Optional[str] = None        # person_id
-    similarity: float = 0.0                   # Similarity to best gallery candidate
-    margin: float = 0.0                       # Top1 - Top2 score gap
-    is_valid_quality: bool = True             # Passed Quality Gate
+    bbox: list[float]
+    score: float
+    landmarks: Optional[np.ndarray] = None
+    quality_score: float = 1.0
+    aligned_face: Optional[np.ndarray] = None
+    embedding: Optional[np.ndarray] = None
+    predicted_id: Optional[str] = None
+    similarity: float = 0.0
+    margin: float = 0.0
+    is_valid_quality: bool = True
+    rejection_reasons: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -72,45 +77,44 @@ class Tracklet:
     time_since_update: int = 0
     history: list[DetectionItem] = field(default_factory=list)
     max_history_len: int = 30
-
-    # Best-frame selection cache
     best_quality_score: float = -1.0
     best_item: Optional[DetectionItem] = None
 
     def add_detection(self, item: DetectionItem) -> None:
-        """Appends detection observation and updates best-frame selection."""
         self.history.append(item)
         if len(self.history) > self.max_history_len:
             self.history.pop(0)
-
         self.last_frame = item.frame_idx
         self.bbox = item.bbox
         self.hits += 1
         self.time_since_update = 0
-
-        # Update best frame if current detection has higher quality score
         if item.quality_score > self.best_quality_score:
             self.best_quality_score = item.quality_score
             self.best_item = item
 
+    @property
+    def latest_embedding(self) -> Optional[np.ndarray]:
+        """Most recent valid embedding available for appearance matching."""
+        for item in reversed(self.history):
+            if item.embedding is not None:
+                return item.embedding
+        return None
+
 
 @dataclass
 class VotingResult:
-    """Consensus voting outcome over a tracklet window."""
     track_id: int
-    status: str                       # 'CONFIRMED_MATCH', 'AMBIGUOUS', 'UNKNOWN', 'PENDING'
-    person_id: Optional[str] = None   # Winning identity if confirmed
-    consensus_ratio: float = 0.0      # Ratio of votes for the winner
-    mean_similarity: float = 0.0      # Average similarity score among matching votes
-    frame_count: int = 0              # Number of evaluated frames
+    status: str
+    person_id: Optional[str] = None
+    consensus_ratio: float = 0.0
+    mean_similarity: float = 0.0
+    frame_count: int = 0
     vote_breakdown: dict[str, int] = field(default_factory=dict)
+    weighted_breakdown: dict[str, float] = field(default_factory=dict)
 
 
 class TemporalVotingEngine:
-    """
-    Evaluates tracklet prediction history over a sliding window
-    to produce stable, noise-free identity decisions.
-    """
+    """Quality- and similarity-weighted identity consensus over a sliding window."""
 
     def __init__(
         self,
@@ -118,155 +122,188 @@ class TemporalVotingEngine:
         min_consensus_ratio: float = 0.60,
         min_frames: int = 3,
         unknown_label: str = "UNKNOWN",
+        similarity_floor: float = 0.0,
     ):
+        if window_size < 1 or min_frames < 1 or min_frames > window_size:
+            raise ValueError("min_frames must be between 1 and window_size")
+        if not 0.0 < min_consensus_ratio <= 1.0:
+            raise ValueError("min_consensus_ratio must be in (0, 1]")
         self.window_size = window_size
         self.min_consensus_ratio = min_consensus_ratio
         self.min_frames = min_frames
         self.unknown_label = unknown_label
+        self.similarity_floor = similarity_floor
+
+    def _item_weight(self, item: DetectionItem) -> float:
+        """Higher-quality and higher-confidence observations contribute more evidence."""
+        quality = float(np.clip(item.quality_score, 0.0, 1.0))
+        detection = float(np.clip(item.score, 0.0, 1.0))
+        # Similarity is only used as confidence, not as a hard identity decision.
+        sim = float(np.clip((item.similarity - self.similarity_floor) / max(1e-6, 1.0 - self.similarity_floor), 0.0, 1.0))
+        return quality * detection * (0.5 + 0.5 * sim)
 
     def vote(self, tracklet: Tracklet) -> VotingResult:
-        """
-        Executes consensus voting over the most recent `window_size` frames of a tracklet.
-        """
-        # Filter for valid observations that have a prediction
         valid_items = [
             item for item in tracklet.history[-self.window_size:]
             if item.is_valid_quality and item.predicted_id is not None
         ]
-
         if len(valid_items) < self.min_frames:
-            return VotingResult(
-                track_id=tracklet.track_id,
-                status="PENDING",
-                frame_count=len(valid_items),
-                vote_breakdown={},
-            )
+            return VotingResult(track_id=tracklet.track_id, status="PENDING", frame_count=len(valid_items))
 
         vote_counts: dict[str, int] = {}
+        weighted: dict[str, float] = {}
         sim_scores: dict[str, list[float]] = {}
-
         for item in valid_items:
             pid = item.predicted_id
             vote_counts[pid] = vote_counts.get(pid, 0) + 1
+            weighted[pid] = weighted.get(pid, 0.0) + self._item_weight(item)
             sim_scores.setdefault(pid, []).append(item.similarity)
 
-        # Find top candidate
-        sorted_candidates = sorted(vote_counts.items(), key=lambda x: x[1], reverse=True)
-        winner_id, winner_votes = sorted_candidates[0]
-        consensus = winner_votes / float(len(valid_items))
+        ranked = sorted(weighted.items(), key=lambda x: (-x[1], x[0]))
+        winner_id, winner_weight = ranked[0]
+        total_weight = sum(weighted.values())
+        weighted_consensus = winner_weight / total_weight if total_weight > 1e-9 else 0.0
+        raw_consensus = vote_counts[winner_id] / float(len(valid_items))
 
-        # Check if winner is UNKNOWN
         if winner_id == self.unknown_label:
             return VotingResult(
                 track_id=tracklet.track_id,
                 status="UNKNOWN",
-                person_id=None,
-                consensus_ratio=consensus,
+                consensus_ratio=raw_consensus,
                 mean_similarity=float(np.mean(sim_scores.get(winner_id, [0.0]))),
                 frame_count=len(valid_items),
                 vote_breakdown=vote_counts,
+                weighted_breakdown=weighted,
             )
 
-        # Check consensus threshold
-        if consensus >= self.min_consensus_ratio:
-            return VotingResult(
-                track_id=tracklet.track_id,
-                status="CONFIRMED_MATCH",
-                person_id=winner_id,
-                consensus_ratio=consensus,
-                mean_similarity=float(np.mean(sim_scores[winner_id])),
-                frame_count=len(valid_items),
-                vote_breakdown=vote_counts,
-            )
+        # Require both temporal support and weighted evidence. This prevents a
+        # few weak/blurred frames from overpowering a smaller set of strong frames.
+        if raw_consensus >= self.min_consensus_ratio and weighted_consensus >= self.min_consensus_ratio:
+            status, person_id = "CONFIRMED_MATCH", winner_id
         else:
-            # Conflicting split vote -> Ambiguous
-            return VotingResult(
-                track_id=tracklet.track_id,
-                status="AMBIGUOUS",
-                person_id=None,
-                consensus_ratio=consensus,
-                mean_similarity=float(np.mean(sim_scores[winner_id])),
-                frame_count=len(valid_items),
-                vote_breakdown=vote_counts,
-            )
+            status, person_id = "AMBIGUOUS", None
+
+        return VotingResult(
+            track_id=tracklet.track_id,
+            status=status,
+            person_id=person_id,
+            consensus_ratio=raw_consensus,
+            mean_similarity=float(np.mean(sim_scores[winner_id])),
+            frame_count=len(valid_items),
+            vote_breakdown=vote_counts,
+            weighted_breakdown=weighted,
+        )
 
 
 class FaceTracker:
-    """
-    Maintains face identity tracks across frames using IoU bipartite matching.
-    """
+    """Multi-face tracker using geometry first, optional embedding appearance second."""
 
     def __init__(
         self,
         iou_threshold: float = 0.3,
         max_lost_frames: int = 15,
         min_hits_to_activate: int = 2,
+        appearance_weight: float = 0.35,
+        appearance_threshold: float = 0.45,
+        recovery_embedding_threshold: float = 0.60,
     ):
+        if not 0.0 <= appearance_weight <= 1.0:
+            raise ValueError("appearance_weight must be in [0, 1]")
         self.iou_threshold = iou_threshold
         self.max_lost_frames = max_lost_frames
         self.min_hits_to_activate = min_hits_to_activate
-
+        self.appearance_weight = appearance_weight
+        self.appearance_threshold = recovery_embedding_threshold if recovery_embedding_threshold > 0 else appearance_threshold
+        self.recovery_embedding_threshold = recovery_embedding_threshold
         self.next_track_id = 1
         self.active_tracklets: dict[int, Tracklet] = {}
         self.lost_tracklets: dict[int, Tracklet] = {}
 
-    def update(
-        self,
-        detections: list[DetectionItem],
-        frame_idx: int,
-    ) -> list[Tracklet]:
-        """
-        Updates trackers with detections in current frame.
+    def _association_score(self, track: Tracklet, det: DetectionItem) -> float:
+        iou = compute_iou(track.bbox, det.bbox)
+        emb = track.latest_embedding
+        appearance = cosine_similarity(emb, det.embedding) if emb is not None and det.embedding is not None else -1.0
+        if appearance < self.appearance_threshold:
+            return -1.0
+        normalized_appearance = max(0.0, appearance)
+        return (1.0 - self.appearance_weight) * iou + self.appearance_weight * normalized_appearance
 
-        :param detections: List of DetectionItem in current frame
-        :param frame_idx: Monotonically increasing frame index
-        :return: List of currently confirmed/active Tracklets
-        """
+    def _match_active(self, detections: list[DetectionItem], frame_idx: int) -> tuple[set[int], set[int]]:
+        keys = list(self.active_tracklets.keys())
+        matched_tracks: set[int] = set()
+        matched_dets: set[int] = set()
+        if not keys or not detections:
+            return matched_tracks, matched_dets
+
+        score_matrix = np.full((len(keys), len(detections)), -1.0, dtype=np.float32)
+        for r, tid in enumerate(keys):
+            for c, det in enumerate(detections):
+                iou = compute_iou(self.active_tracklets[tid].bbox, det.bbox)
+                if iou >= self.iou_threshold:
+                    score_matrix[r, c] = self._association_score(self.active_tracklets[tid], det)
+                elif self.active_tracklets[tid].latest_embedding is not None and det.embedding is not None:
+                    appearance = cosine_similarity(self.active_tracklets[tid].latest_embedding, det.embedding)
+                    if appearance >= self.appearance_threshold:
+                        score_matrix[r, c] = self.appearance_weight * max(0.0, appearance)
+
+        row_ind, col_ind = linear_sum_assignment(-score_matrix)
+        for r, c in zip(row_ind, col_ind):
+            if score_matrix[r, c] < 0.0:
+                continue
+            tid = keys[r]
+            self.active_tracklets[tid].add_detection(detections[c])
+            matched_tracks.add(tid)
+            matched_dets.add(c)
+        return matched_tracks, matched_dets
+
+    def _recover_lost(self, detections: list[DetectionItem], unmatched_dets: set[int], frame_idx: int) -> set[int]:
+        recovered: set[int] = set()
+        if not self.lost_tracklets:
+            return recovered
+        for tid, track in list(self.lost_tracklets.items()):
+            if track.time_since_update > self.max_lost_frames:
+                del self.lost_tracklets[tid]
+                continue
+            emb = track.latest_embedding
+            if emb is None:
+                continue
+            best_idx, best_score = None, -1.0
+            for idx in unmatched_dets - recovered:
+                det_emb = detections[idx].embedding
+                if det_emb is None:
+                    continue
+                score = cosine_similarity(emb, det_emb)
+                if score >= self.recovery_embedding_threshold and score > best_score:
+                    best_idx, best_score = idx, score
+            if best_idx is not None:
+                track.add_detection(detections[best_idx])
+                self.active_tracklets[tid] = track
+                del self.lost_tracklets[tid]
+                recovered.add(best_idx)
+        return recovered
+
+    def update(self, detections: list[DetectionItem], frame_idx: int) -> list[Tracklet]:
         tracklet_keys = list(self.active_tracklets.keys())
-        tracklet_boxes = [self.active_tracklets[k].bbox for k in tracklet_keys]
-        det_boxes = [d.bbox for d in detections]
+        matched_tracks, matched_dets = self._match_active(detections, frame_idx)
 
-        matched_tracks = set()
-        matched_dets = set()
-
-        if tracklet_boxes and det_boxes:
-            iou_matrix = compute_iou_matrix(tracklet_boxes, det_boxes)
-            # Maximum weight bipartite matching using Hungarian algorithm
-            cost_matrix = 1.0 - iou_matrix
-            row_ind, col_ind = linear_sum_assignment(cost_matrix)
-
-            for r, c in zip(row_ind, col_ind):
-                if iou_matrix[r, c] >= self.iou_threshold:
-                    tid = tracklet_keys[r]
-                    self.active_tracklets[tid].add_detection(detections[c])
-                    matched_tracks.add(tid)
-                    matched_dets.add(c)
-
-        # Increment lost time for unmatched active tracks
-        unmatched_tracks = set(tracklet_keys) - matched_tracks
-        for tid in unmatched_tracks:
+        for tid in set(tracklet_keys) - matched_tracks:
             tr = self.active_tracklets[tid]
             tr.time_since_update += 1
             if tr.time_since_update > self.max_lost_frames:
                 del self.active_tracklets[tid]
                 self.lost_tracklets[tid] = tr
 
-        # Create new tracklets for unmatched detections
-        for i, det in enumerate(detections):
-            if i not in matched_dets:
-                new_tracklet = Tracklet(
-                    track_id=self.next_track_id,
-                    start_frame=frame_idx,
-                    last_frame=frame_idx,
-                    bbox=det.bbox,
-                    hits=0,
-                    time_since_update=0,
-                )
-                new_tracklet.add_detection(det)
-                self.active_tracklets[self.next_track_id] = new_tracklet
-                self.next_track_id += 1
+        unmatched_dets = set(range(len(detections))) - matched_dets
+        recovered_dets = self._recover_lost(detections, unmatched_dets, frame_idx)
+        unmatched_dets -= recovered_dets
 
-        # Return active tracks that have met minimum hits threshold
+        for i in sorted(unmatched_dets):
+            det = detections[i]
+            tr = Tracklet(track_id=self.next_track_id, start_frame=frame_idx, last_frame=frame_idx, bbox=det.bbox)
+            tr.add_detection(det)
+            self.active_tracklets[self.next_track_id] = tr
+            self.next_track_id += 1
+
         return [
             tr for tr in self.active_tracklets.values()
             if tr.hits >= self.min_hits_to_activate and tr.time_since_update == 0
