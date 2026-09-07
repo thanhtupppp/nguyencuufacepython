@@ -47,7 +47,9 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 - [x] Vector client + unit tests.
 - [x] Regression test defining person-level top-k semantics when one person has many templates.
 - [x] Correctness-first SQL specification for best-template-per-person ranking.
+- [x] Reusable person-level search helper.
 - [ ] Wire person-level SQL into `DatabaseClient.search_top_k()` (issue #2).
+- [ ] Benchmark person-level pgvector recall under filtering (issue #3).
 - [ ] E2E integration với real model + PostgreSQL/pgvector.
 
 ### P1.2 FastAPI — IMPLEMENTED / INTEGRATION TEST PENDING
@@ -91,4 +93,4 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 
 ## Current execution order
 
-P0.1 real-model benchmark (blocked on assets/data) -> P0.2 quality calibration -> P0.3 tracking benchmark -> P0.4 liveness benchmark (protocol ready; blocked on model/data) -> P1.1 wire person-level vector-search correctness (issue #2) -> P1.2 PostgreSQL-backed API integration -> P1.3 MQTT broker execution (await successful CI run) -> P2.1 PC CPU baseline -> P2.1 Raspberry Pi -> P2.1 Android -> P2.2 model A/B.
+P0.1 real-model benchmark (blocked on assets/data) -> P0.2 quality calibration -> P0.3 tracking benchmark -> P0.4 liveness benchmark (protocol ready; blocked on model/data) -> P1.1 wire person-level vector-search correctness (issue #2) -> P1.1 vector recall benchmark (issue #3) -> P1.2 PostgreSQL-backed API integration -> P1.3 MQTT broker execution (await successful CI run) -> P2.1 PC CPU baseline -> P2.1 Raspberry Pi -> P2.1 Android -> P2.2 model A/B.
