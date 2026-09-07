@@ -51,15 +51,16 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 - [ ] E2E integration test với PostgreSQL/pgvector + licensed assets.
 
 ### P1.3 Multi-device — PARTIAL
-- [x] WebSocket event transport.
+- [x] WebSocket event transport + contract tests.
 - [x] MQTT v1 topic/payload contract + validation tests.
 - [x] Paho MQTT adapter: TLS, LWT availability, QoS/retained policy, reconnect backoff, idempotent request_id handling.
 - [x] MQTT adapter unit tests.
 - [x] Local Mosquitto integration harness + opt-in broker tests.
 - [x] Shared idempotency abstraction: bounded TTL fallback + PostgreSQL atomic store.
 - [ ] Execute MQTT broker integration test and capture result.
-- [ ] HTTP/WebSocket adapter tests.
-- [ ] Multi-camera device/session model.
+- [x] HTTP/WebSocket adapter contract tests.
+- [x] Multi-camera device/session runtime model.
+- [ ] Persist device/session state for multi-worker deployment.
 
 ## P2 — Edge + Model A/B
 
@@ -77,4 +78,4 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 
 ## Current execution order
 
-P0.1 real-model benchmark (blocked on assets/data) -> P0.2 quality calibration -> P0.3 tracking benchmark -> P0.4 liveness calibration -> P1 integration tests -> P1.3 MQTT broker integration + HTTP/WebSocket adapter tests -> multi-camera/device transport -> edge benchmarks -> model A/B.
+P0.1 real-model benchmark (blocked on assets/data) -> P0.2 quality calibration -> P0.3 tracking benchmark -> P0.4 liveness calibration -> P1 integration tests -> P1.3 MQTT broker execution + distributed device/session persistence -> edge benchmarks -> model A/B.
