@@ -263,3 +263,10 @@ def test_dispenser_config_get_and_update():
     assert cfg2["voice_volume"] == 0.9
     assert cfg2["voice_rate"] == 1.1
 
+
+def test_dispenser_tts_endpoint():
+    res = client.get("/api/v1/dispenser/tts?text=Xin+chao")
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "audio/mpeg"
+    assert len(res.content) > 0
+

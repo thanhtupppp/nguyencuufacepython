@@ -1,9 +1,14 @@
 from datetime import datetime, timezone
+import hashlib
+from pathlib import Path
 from typing import Optional
+import urllib.parse
+import urllib.request
 import uuid
 
 import numpy as np
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from src.api.dependencies import db, recognition_pipeline, verify_api_key
@@ -343,4 +348,34 @@ async def update_dispenser_config(config: DispenserConfigModel) -> dict:
     _dispenser_config["voice_volume"] = config.voice_volume
     _dispenser_config["voice_rate"] = config.voice_rate
     return {"status": "ok", "config": _dispenser_config}
+
+
+TTS_CACHE_DIR = Path("data/tts_cache")
+TTS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@router.get("/tts")
+async def get_vietnamese_tts(text: str = Query(..., min_length=1, max_length=500)):
+    """Returns crystal-clear, authentic native Vietnamese female voice (Google TTS) audio with disk caching."""
+    clean_text = text.strip()
+    cache_key = hashlib.md5(clean_text.encode("utf-8")).hexdigest()
+    cache_file = TTS_CACHE_DIR / f"{cache_key}.mp3"
+
+    if cache_file.exists():
+        return Response(content=cache_file.read_bytes(), media_type="audio/mpeg")
+
+    # Fetch from Google Vietnamese TTS
+    encoded = urllib.parse.quote(clean_text)
+    url = f"https://translate.google.com/translate_tts?ie=UTF-8&tl=vi&client=tw-ob&q={encoded}"
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = resp.read()
+            cache_file.write_bytes(data)
+            return Response(content=data, media_type="audio/mpeg")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch Vietnamese TTS: {e}")
 

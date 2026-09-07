@@ -2,7 +2,7 @@ import os
 import secrets
 from typing import Optional
 
-from fastapi import HTTPException, Security, status
+from fastapi import HTTPException, Query, Security, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from src.database.client import DatabaseClient
@@ -32,8 +32,9 @@ bearer_scheme = HTTPBearer(auto_error=False)
 def verify_api_key(
     header_key: Optional[str] = Security(api_key_header),
     bearer: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
+    query_key: Optional[str] = Query(None, alias="api_key"),
 ) -> bool:
-    """Verifies API Key from X-API-Key header or Authorization: Bearer.
+    """Verifies API Key from X-API-Key header, Authorization: Bearer, or ?api_key= query.
 
     If API_KEY is configured in the environment, requests must provide matching
     credentials. If unconfigured (development mode), requests pass through.
@@ -42,7 +43,7 @@ def verify_api_key(
     if not expected_key:
         return True
 
-    provided_key = header_key or (bearer.credentials if bearer else None)
+    provided_key = header_key or (bearer.credentials if bearer else None) or query_key
     if not provided_key or not secrets.compare_digest(provided_key, expected_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
