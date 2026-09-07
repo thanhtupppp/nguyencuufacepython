@@ -37,7 +37,7 @@ def compute_iou(box1: Sequence[float] | np.ndarray, box2: Sequence[float] | np.n
     union_area = area1 + area2 - inter_area
     if union_area <= 1e-6:
         return 0.0
-    return float(inter_area / union_area)
+    return inter_area / union_area
 
 
 def compute_iou_matrix(boxes1: list[list[float]], boxes2: list[list[float]]) -> np.ndarray:
