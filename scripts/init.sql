@@ -2,7 +2,6 @@
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- 1. Persons Table
 CREATE TABLE IF NOT EXISTS persons (
     person_id VARCHAR(64) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -14,7 +13,6 @@ CREATE TABLE IF NOT EXISTS persons (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2. Face Embeddings Table (512D)
 CREATE TABLE IF NOT EXISTS face_embeddings (
     id BIGSERIAL PRIMARY KEY,
     person_id VARCHAR(64) NOT NULL REFERENCES persons(person_id) ON DELETE CASCADE,
@@ -25,7 +23,6 @@ CREATE TABLE IF NOT EXISTS face_embeddings (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3. Devices Table
 CREATE TABLE IF NOT EXISTS devices (
     device_id VARCHAR(64) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -36,7 +33,6 @@ CREATE TABLE IF NOT EXISTS devices (
     last_ping TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. Access Logs Table
 CREATE TABLE IF NOT EXISTS access_logs (
     id BIGSERIAL PRIMARY KEY,
     person_id VARCHAR(64) REFERENCES persons(person_id) ON DELETE SET NULL,
@@ -47,8 +43,17 @@ CREATE TABLE IF NOT EXISTS access_logs (
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 5. HNSW Index for ultra-fast Cosine Distance vector search
-CREATE INDEX IF NOT EXISTS idx_face_embeddings_hnsw 
-ON face_embeddings 
+CREATE TABLE IF NOT EXISTS mqtt_idempotency (
+    device_id VARCHAR(64) NOT NULL,
+    request_id VARCHAR(128) NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (device_id, request_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mqtt_idempotency_expires
+ON mqtt_idempotency (expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_face_embeddings_hnsw
+ON face_embeddings
 USING hnsw (embedding vector_cosine_ops)
 WITH (m = 16, ef_construction = 64);
