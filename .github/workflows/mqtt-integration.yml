@@ -1,0 +1,42 @@
+name: MQTT integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  mqtt-broker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test dependencies
+        run: python -m pip install -U pip && pip install -r requirements.txt
+      - name: Start Mosquitto
+        run: docker compose up -d mqtt
+      - name: Wait for broker health
+        run: |
+          for i in $(seq 1 30); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' nguyencuu_mqtt 2>/dev/null || true)
+            if [ "$status" = "healthy" ]; then exit 0; fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs mqtt
+          exit 1
+      - name: Run real broker integration tests
+        env:
+          MQTT_INTEGRATION: '1'
+          MQTT_HOST: 127.0.0.1
+          MQTT_PORT: '1883'
+        run: pytest tests/integration/test_mqtt_broker.py -q
+      - name: Collect broker logs on failure
+        if: failure()
+        run: docker compose logs mqtt
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
