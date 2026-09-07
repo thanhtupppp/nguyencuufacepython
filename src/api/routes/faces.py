@@ -1,9 +1,11 @@
+from datetime import datetime, timezone
 from typing import Optional
 
 import numpy as np
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from src.api.dependencies import db, recognition_pipeline, verify_api_key
+from src.api.websocket_manager import ws_manager
 
 router = APIRouter(dependencies=[Depends(verify_api_key)])
 
@@ -97,6 +99,21 @@ async def recognize_face(
         raise HTTPException(status_code=409, detail="Requested model_version does not match loaded model")
     decision = db.recognize_with_margin(embedding, model_version, threshold, margin)
     db.log_access(decision.person_id, device_id, decision.similarity, decision.margin, decision.status)
+
+    # Broadcast real-time recognition event to WebSocket subscribers
+    person_record = db.get_person(decision.person_id) if decision.person_id else None
+    event_payload = {
+        "event_type": "ACCESS_EVENT",
+        "person_id": decision.person_id,
+        "name": person_record.get("name") if person_record else None,
+        "status": decision.status,
+        "similarity": decision.similarity,
+        "margin": decision.margin,
+        "device_id": device_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    await ws_manager.broadcast(event_payload)
+
     return {
         "status": decision.status,
         "person_id": decision.person_id,

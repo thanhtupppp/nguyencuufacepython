@@ -8,10 +8,15 @@ from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBea
 from src.database.client import DatabaseClient
 from src.api.recognition_runtime import build_recognition_pipeline
 
+from pathlib import Path
+
 # One shared client per API process keeps identity and embedding operations in
-# the same database connection/store. Production deployment can replace this
-# with a dependency container or pool without changing route contracts.
-db = DatabaseClient()
+# the same database connection/store.
+sqlite_path_env = os.getenv("SQLITE_PATH")
+if not sqlite_path_env and not os.getenv("DATABASE_URL") and Path("data/faces.db").exists():
+    sqlite_path_env = "data/faces.db"
+
+db = DatabaseClient(sqlite_path=sqlite_path_env) if sqlite_path_env else DatabaseClient()
 
 # Recognition is intentionally initialized once per API process. Missing or
 # invalid real model assets leave this as None, so face endpoints fail closed.
