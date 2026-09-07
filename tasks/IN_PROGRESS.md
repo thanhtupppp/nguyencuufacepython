@@ -11,11 +11,16 @@ Nhiệm vụ đang thực hiện:
 - [x] Model registry contract: model_version → ONNX asset + SHA-256 fingerprint + 512D contract.
 - [x] Recognition pipeline contract: SCRFD → quality gate → 5-point alignment → ArcFace embedding, with fail-closed face/quality checks.
 - [x] Wire model registry and pipeline into API runtime; fail-closed until real licensed assets + fingerprint are installed.
-- [ ] Add liveness gate to production pipeline after a validated anti-spoofing model is configured.
-- [ ] WebSocket `/ws/v1/events` stream kết quả realtime.
+- [x] WebSocket `/ws/v1/events` real-time event stream and external event publishing endpoint.
+- [x] Optional strict liveness gate wired into the production recognition pipeline when `LIVENESS_MODEL_PATH` is configured.
 - [ ] Chạy integration tests với PostgreSQL + pgvector và real model asset.
 
 ## 🔬 P0.1-RUN: Real-model benchmark gate
 - [ ] Chạy benchmark bằng model ArcFace/InsightFace ONNX hợp lệ.
 - [ ] Khóa threshold + top1-top2 margin từ validation.
 - [ ] Xuất FAR/FRR/EER/TAR và condition breakdown trên locked test.
+
+## 🛡️ P0.4: Liveness empirical calibration
+- [ ] Benchmark genuine/live vs print/screen/replay attacks bằng model liveness thực.
+- [ ] Khóa threshold và inconclusive policy trên validation.
+- [ ] Đo APCER/BPCER/ACER hoặc tương đương theo attack condition.
