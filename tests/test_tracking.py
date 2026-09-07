@@ -401,8 +401,12 @@ def test_appearance_gated_association():
     track_map = {tr.track_id: tr for tr in active1}
 
     # Verify Bob matched with Bob's track and Alice with Alice's track
-    assert np.dot(track_map[alice_id].appearance_embedding, emb_alice) > 0.99
-    assert np.dot(track_map[bob_id].appearance_embedding, emb_bob) > 0.99
+    alice_emb = track_map[alice_id].appearance_embedding
+    bob_emb = track_map[bob_id].appearance_embedding
+    assert alice_emb is not None
+    assert bob_emb is not None
+    assert np.dot(alice_emb, emb_alice) > 0.99
+    assert np.dot(bob_emb, emb_bob) > 0.99
 
 
 def test_identity_persistence_across_blinks():

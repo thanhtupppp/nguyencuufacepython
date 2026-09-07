@@ -343,7 +343,7 @@ class DatabaseClient:
                 "quality_score": quality_score,
                 "source_image_path": source_image_path,
             })
-            return int(new_id)
+            return new_id
 
         if self.use_memory:
             new_id = len(self._mem_embeddings) + 1
