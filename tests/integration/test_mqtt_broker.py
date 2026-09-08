@@ -54,12 +54,13 @@ def test_command_round_trip_and_request_id_deduplication() -> None:
         time.sleep(0.2)
 
         payload = json.dumps({
-            "schema_version": "1.0",
+            "schema_version": 1,
             "request_id": request_id,
-            "command": "ping",
+            "command": "health",
             "payload": {},
         })
-        publisher.publish(adapter.command_topic, payload=payload, qos=1, retain=False).wait_for_publish(5)
+        info = publisher.publish(adapter.command_topic, payload=payload, qos=1, retain=False)
+        assert info.wait_for_publish(5)
         assert done.wait(5), "command was not delivered"
 
         publisher.publish(adapter.command_topic, payload=payload, qos=1, retain=False).wait_for_publish(5)
