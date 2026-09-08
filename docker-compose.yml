@@ -40,3 +40,5 @@ volumes:
     driver: local
   mosquitto_data:
     driver: local
+  mosquitto_log:
+    driver: local
