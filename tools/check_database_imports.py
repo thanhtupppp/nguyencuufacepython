@@ -1,7 +1,10 @@
 """Fail if runtime code imports the legacy DatabaseClient directly.
 
-Production code should import DatabaseClient from ``src.database`` so the
-person-level PostgreSQL ranking implementation remains the single entrypoint.
+The guard intentionally scans only ``src/`` because tests and benchmark
+fixtures may import legacy implementations for compatibility/regression
+coverage. Production runtime code must import DatabaseClient from
+``src.database`` so the person-level PostgreSQL ranking implementation remains
+the single entrypoint.
 """
 
 from __future__ import annotations
@@ -11,14 +14,15 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+SOURCE_ROOT = ROOT / "src"
 IGNORED_PARTS = {".git", ".venv", "venv", "__pycache__", ".pytest_cache"}
 
 
 def python_files() -> list[Path]:
     return [
-        p for p in ROOT.rglob("*.py")
+        p
+        for p in SOURCE_ROOT.rglob("*.py")
         if not (set(p.parts) & IGNORED_PARTS)
-        and p.name != "check_database_imports.py"
     ]
 
 
@@ -45,10 +49,10 @@ def find_legacy_imports(path: Path) -> list[str]:
 def main() -> int:
     violations = [v for p in python_files() for v in find_legacy_imports(p)]
     if violations:
-        print("Legacy DatabaseClient imports found:")
+        print("Legacy DatabaseClient imports found in production source:")
         print("\n".join(violations))
         return 1
-    print("OK: production Python files do not import the legacy DatabaseClient directly.")
+    print("OK: src/ production Python files do not import the legacy DatabaseClient directly.")
     return 0
 
 
