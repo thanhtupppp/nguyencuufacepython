@@ -1,71 +1,92 @@
+"""MQTT v1 transport adapter for edge-device control/state/events."""
+
 from __future__ import annotations
 
-import json
 import threading
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 import paho.mqtt.client as mqtt
 
-from src.devices.mqtt_protocol import decode, encode, make_command, make_event, make_state
+from src.devices.idempotency import IdempotencyStore, TTLMemoryIdempotencyStore
+from src.devices.mqtt_contract import decode, encode, make_command, make_event, make_state, make_topics
+
+CommandHandler = Callable[[dict[str, Any]], None]
 
 
 @dataclass(frozen=True)
 class MQTTSettings:
-    host: str = "127.0.0.1"
-    port: int = 1883
+    host: str
+    port: int = 8883
+    client_id: str = "face-service"
+    username: Optional[str] = None
+    password: Optional[str] = None
+    ca_cert: Optional[str] = None
+    client_cert: Optional[str] = None
+    client_key: Optional[str] = None
     keepalive: int = 60
-    client_id: str = ""
-
-
-class InMemoryIdempotencyStore:
-    def __init__(self) -> None:
-        self._seen: set[tuple[str, str]] = set()
-        self._lock = threading.Lock()
-
-    def claim(self, device_id: str, request_id: str) -> bool:
-        key = (device_id, request_id)
-        with self._lock:
-            if key in self._seen:
-                return False
-            self._seen.add(key)
-            return True
+    reconnect_min_delay: int = 1
+    reconnect_max_delay: int = 30
 
 
 class MQTTAdapter:
+    """Paho adapter implementing MQTT v1 with injectable idempotency storage.
+
+    The default store is bounded/TTL and intended only for one worker. A shared
+    PostgresIdempotencyStore should be injected for horizontally scaled workers.
+    """
+
     def __init__(
         self,
         settings: MQTTSettings,
-        *,
         device_id: str,
-        command_handler: Optional[Callable[[dict[str, Any]], None]] = None,
-        idempotency_store: Optional[InMemoryIdempotencyStore] = None,
+        command_handler: Optional[CommandHandler] = None,
+        client: Optional[mqtt.Client] = None,
+        idempotency_store: Optional[IdempotencyStore] = None,
     ) -> None:
         self.settings = settings
         self.device_id = device_id
+        self.topics = make_topics(device_id)
         self.command_handler = command_handler
-        self.idempotency_store = idempotency_store or InMemoryIdempotencyStore()
-        self.command_topic = f"devices/{device_id}/command"
-        self.state_topic = f"devices/{device_id}/state"
-        self.event_topic = f"devices/{device_id}/event"
-        self.availability_topic = f"devices/{device_id}/availability"
+        self.idempotency_store = idempotency_store or TTLMemoryIdempotencyStore()
         self._connected = threading.Event()
 
-        self.client = mqtt.Client(
-            mqtt.CallbackAPIVersion.VERSION2,
-            client_id=settings.client_id or f"service-{device_id}",
-        )
-        self.client.will_set(self.availability_topic, payload="offline", qos=1, retain=True)
+        self.client = client or mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=settings.client_id)
+        if settings.username is not None:
+            self.client.username_pw_set(settings.username, settings.password)
+        if settings.ca_cert:
+            self.client.tls_set(ca_certs=settings.ca_cert, certfile=settings.client_cert, keyfile=settings.client_key)
+        self.client.reconnect_delay_set(min_delay=settings.reconnect_min_delay, max_delay=settings.reconnect_max_delay)
+        self.client.will_set(self.topics.availability, payload="offline", qos=1, retain=True)
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
         self.client.on_message = self._on_message
+
+    @property
+    def command_topic(self) -> str:
+        return self.topics.command
+
+    @property
+    def state_topic(self) -> str:
+        return self.topics.state
+
+    @property
+    def event_topic(self) -> str:
+        return self.topics.event
+
+    @property
+    def availability_topic(self) -> str:
+        return self.topics.availability
+
+    @property
+    def is_connected(self) -> bool:
+        return self._connected.is_set()
 
     def connect(self) -> None:
         self.client.connect(self.settings.host, self.settings.port, self.settings.keepalive)
         self.client.loop_start()
 
     def disconnect(self) -> None:
-        self._connected.clear()
         self.client.loop_stop()
         self.client.disconnect()
 
@@ -103,5 +124,5 @@ class MQTTAdapter:
                 return
             if self.command_handler:
                 self.command_handler(body)
-        except (TypeError, ValueError, json.JSONDecodeError):
+        except ValueError:
             return
