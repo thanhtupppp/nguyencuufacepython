@@ -35,10 +35,16 @@ jobs:
         run: python tools/benchmark_pgvector_retrieval.py --mode production --persons 1000 --templates 10 --queries 100 --top-k 10 --ef-search 100 --iterative-scan off
       - name: Candidate-first HNSW
         run: python tools/benchmark_pgvector_retrieval.py --mode candidate --persons 1000 --templates 10 --queries 100 --top-k 10 --ef-search 100 --iterative-scan off --oversample 20
-      - name: Candidate-first HNSW exact rerank
+      - name: Candidate-first HNSW exact rerank oversample 20
         run: python tools/benchmark_pgvector_retrieval.py --mode candidate_rerank --persons 1000 --templates 10 --queries 100 --top-k 10 --ef-search 100 --iterative-scan off --oversample 20
       - name: Candidate-first HNSW exact rerank oversample 100
         run: python tools/benchmark_pgvector_retrieval.py --mode candidate_rerank --persons 1000 --templates 10 --queries 100 --top-k 10 --ef-search 100 --iterative-scan off --oversample 100
+      - name: Prototype person HNSW
+        run: python tools/benchmark_pgvector_retrieval.py --mode prototype --persons 1000 --templates 10 --queries 100 --top-k 10 --ef-search 100 --iterative-scan off --oversample 20
+      - name: Prototype person HNSW exact rerank oversample 20
+        run: python tools/benchmark_pgvector_retrieval.py --mode prototype_rerank --persons 1000 --templates 10 --queries 100 --top-k 10 --ef-search 100 --iterative-scan off --oversample 20
+      - name: Prototype person HNSW exact rerank oversample 100
+        run: python tools/benchmark_pgvector_retrieval.py --mode prototype_rerank --persons 1000 --templates 10 --queries 100 --top-k 10 --ef-search 100 --iterative-scan off --oversample 100
       - name: Candidate-first HNSW strict iterative scan
         run: python tools/benchmark_pgvector_retrieval.py --mode candidate --persons 1000 --templates 10 --queries 100 --top-k 10 --ef-search 100 --iterative-scan strict_order --oversample 20
       - name: Candidate-first HNSW relaxed iterative scan
