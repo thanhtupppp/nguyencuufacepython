@@ -1,8 +1,8 @@
 """Deterministic pgvector person-level retrieval benchmark.
 
-The benchmark compares the correctness-first production query with a
-candidate-first HNSW strategy against the same exact person-level reference.
-Synthetic vectors are used so no biometric data is required.
+The benchmark compares the correctness-first production query with
+candidate-first HNSW strategies against the same exact person-level
+reference. Synthetic vectors are used so no biometric data is required.
 """
 
 from __future__ import annotations
@@ -68,8 +68,6 @@ def exact_person_topk(
     active: set[str],
     model_version: str,
 ) -> list[str]:
-    # Synthetic rows all carry the requested model version. The argument is
-    # kept explicit so the reference semantics mirror production filtering.
     if model_version != "arcface_v1":
         return []
     best: dict[str, float] = {}
@@ -91,6 +89,21 @@ def unique_topk(raw_rows: list[tuple[str, float]], k: int) -> list[str]:
     return out
 
 
+def exact_rerank_candidates(
+    raw_rows: list[tuple[str, float]],
+    q: np.ndarray,
+    gallery: dict[str, list[np.ndarray]],
+    k: int,
+) -> list[str]:
+    candidate_ids = {pid for pid, _ in raw_rows}
+    scored: list[tuple[str, float]] = []
+    for pid in candidate_ids:
+        score = max(float(np.dot(v, q)) for v in gallery[pid])
+        scored.append((pid, score))
+    scored.sort(key=lambda item: item[1], reverse=True)
+    return [pid for pid, _ in scored[:k]]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--persons", type=int, default=1000)
@@ -108,9 +121,9 @@ def main() -> int:
     )
     ap.add_argument(
         "--mode",
-        choices=("production", "candidate"),
+        choices=("production", "candidate", "candidate_rerank"),
         default="production",
-        help="production=best-template-per-person query; candidate=HNSW template oversampling",
+        help="candidate_rerank performs exact cosine reranking over HNSW candidate persons",
     )
     ap.add_argument("--oversample", type=int, default=20)
     args = ap.parse_args()
@@ -128,6 +141,9 @@ def main() -> int:
     person_ids = sorted({p for p, _ in rows})
     active_count = max(1, int(round(len(person_ids) * args.active_ratio)))
     active = set(person_ids[:active_count])
+    gallery: dict[str, list[np.ndarray]] = {}
+    for pid, vector in rows:
+        gallery.setdefault(pid, []).append(vector)
 
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:
@@ -143,8 +159,6 @@ def main() -> int:
         conn.commit()
 
         with conn.cursor() as cur:
-            # PostgreSQL does not accept bind parameters in SET's GUC value.
-            # set_config() keeps the benchmark parameterized without unsafe SQL interpolation.
             cur.execute("SELECT set_config('hnsw.ef_search', %s, false)", (str(args.ef_search),))
             cur.execute(
                 "SELECT set_config('hnsw.iterative_scan', %s, false)",
@@ -180,8 +194,13 @@ def main() -> int:
                         ),
                     )
                 raw = cur.fetchall()
+            if args.mode == "production":
+                got = [row[0] for row in raw]
+            elif args.mode == "candidate_rerank":
+                got = exact_rerank_candidates(raw, q, gallery, args.top_k)
+            else:
+                got = unique_topk(raw, args.top_k)
             latencies_ms.append((time.perf_counter() - t0) * 1000.0)
-            got = [p for p in (row[0] for row in raw)] if args.mode == "production" else unique_topk(raw, args.top_k)
             recalls.append(len(expected.intersection(got)) / args.top_k)
 
     print({
@@ -193,9 +212,10 @@ def main() -> int:
         "top_k": args.top_k,
         "ef_search": args.ef_search,
         "iterative_scan": args.iterative_scan,
-        "oversample": args.oversample if args.mode == "candidate" else None,
+        "oversample": args.oversample if args.mode != "production" else None,
         "recall_at_k_mean": float(np.mean(recalls)),
         "recall_at_k_min": float(np.min(recalls)),
+        "missing_person_rate": float(1.0 - np.mean(recalls)),
         "latency_ms_p50": float(np.percentile(latencies_ms, 50)),
         "latency_ms_p95": float(np.percentile(latencies_ms, 95)),
     })
