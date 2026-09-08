@@ -99,7 +99,7 @@ class MQTTAdapter:
         return self.client.publish(self.event_topic, payload=encode(body), qos=1, retain=False)
 
     def publish_command(self, request_id: str, command: str, payload: Optional[dict[str, Any]] = None) -> mqtt.MQTTMessageInfo:
-        body = make_command(request_id=request_id, command=command, payload=payload or {})
+        body = make_command(command=command, request_id=request_id, payload=payload or {})
         return self.client.publish(self.command_topic, payload=encode(body), qos=1, retain=False)
 
     def _on_connect(self, client: mqtt.Client, userdata: Any, flags: Any, reason_code: Any, properties: Any = None) -> None:
