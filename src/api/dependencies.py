@@ -1,14 +1,13 @@
 import os
 import secrets
+from pathlib import Path
 from typing import Optional
 
 from fastapi import HTTPException, Query, Security, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
-from src.database.client import DatabaseClient
+from src.database import DatabaseClient
 from src.api.recognition_runtime import build_recognition_pipeline
-
-from pathlib import Path
 
 # One shared client per API process keeps identity and embedding operations in
 # the same database connection/store.
