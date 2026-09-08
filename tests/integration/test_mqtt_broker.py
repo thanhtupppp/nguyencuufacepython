@@ -60,10 +60,13 @@ def test_command_round_trip_and_request_id_deduplication() -> None:
             "payload": {},
         })
         info = publisher.publish(adapter.command_topic, payload=payload, qos=1, retain=False)
-        assert info.wait_for_publish(5)
+        info.wait_for_publish(5)
+        assert info.is_published(), "command publish was not acknowledged"
         assert done.wait(5), "command was not delivered"
 
-        publisher.publish(adapter.command_topic, payload=payload, qos=1, retain=False).wait_for_publish(5)
+        duplicate = publisher.publish(adapter.command_topic, payload=payload, qos=1, retain=False)
+        duplicate.wait_for_publish(5)
+        assert duplicate.is_published(), "duplicate command publish was not acknowledged"
         time.sleep(0.5)
         assert len(received) == 1
         assert received[0]["request_id"] == request_id
@@ -94,7 +97,9 @@ def test_state_is_retained_and_availability_is_retained() -> None:
     try:
         adapter.connect()
         assert adapter._connected.wait(5)
-        adapter.publish_state(status="online", firmware_version="test", camera_id="cam-01").wait_for_publish(5)
+        state_info = adapter.publish_state(status="online", firmware_version="test", camera_id="cam-01")
+        state_info.wait_for_publish(5)
+        assert state_info.is_published(), "state publish was not acknowledged"
 
         subscriber.connect(host, port, 60)
         subscriber.subscribe(adapter.state_topic, qos=1)
