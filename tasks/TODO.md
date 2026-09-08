@@ -52,8 +52,11 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 - [x] Added static guard against direct imports of legacy `DatabaseClient`.
 - [x] Added the import-boundary guard to the CI workflow.
 - [ ] Observe a successful CI run proving the import guard passes.
-  - Latest run #40 (2026-09-08 00:03 UTC) failed at the guard before broker startup; root cause was the guard scanning test/benchmark Python files as if they were production code.
-  - [x] Corrected guard scope to `src/` only; next push must produce a passing CI run before this item is checked.
+  - Run #40 (2026-09-08 00:03 UTC) failed at the guard because the guard scanned test/benchmark Python files as production code.
+  - [x] Corrected guard scope to `src/` only.
+  - [x] Run #44 (2026-09-08 08:56 local / 01:56 UTC) proves the corrected import guard passes, but the workflow still failed because `docker compose` did not receive the required `POSTGRES_PASSWORD` in that run's workflow revision.
+  - [x] Added a CI-safe `POSTGRES_PASSWORD` environment value to the workflow.
+  - [ ] Run #45 must complete successfully before the broader MQTT CI gate is marked DONE.
 - [x] Deterministic pgvector retrieval benchmark harness (synthetic, no biometric data).
 - [ ] Run benchmark under filtering and record recall/latency results (issue #3).
 - [ ] Benchmark candidate-first HNSW vs one-vector-per-person prototype architecture (issue #4).
@@ -100,4 +103,4 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 
 ## Current execution order
 
-P0.1 real-model benchmark (blocked on assets/data) -> P0.2 quality calibration -> P0.3 tracking benchmark -> P0.4 liveness benchmark (protocol ready; blocked on model/data) -> P1.1 fix/verify CI import guard + run vector recall benchmark (issue #3) + retrieval architecture benchmark (issue #4) -> P1.2 PostgreSQL-backed API integration -> P1.3 MQTT broker execution (await successful CI run) -> P2.1 PC CPU baseline -> P2.1 Raspberry Pi -> P2.1 Android -> P2.2 model A/B.
+P0.1 real-model benchmark (blocked on assets/data) -> P0.2 quality calibration -> P0.3 tracking benchmark -> P0.4 liveness benchmark (protocol ready; blocked on model/data) -> P1.1 verify successful CI run + vector recall benchmark (issue #3) + retrieval architecture benchmark (issue #4) -> P1.2 PostgreSQL-backed API integration -> P1.3 MQTT broker execution -> P2.1 PC CPU baseline -> P2.1 Raspberry Pi -> P2.1 Android -> P2.2 model A/B.
