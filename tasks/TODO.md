@@ -51,13 +51,12 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 - [x] Package-level `DatabaseClient` now delegates PostgreSQL search to person-level ranking helper.
 - [x] Added static guard against direct imports of legacy `DatabaseClient`.
 - [x] Added the import-boundary guard to the CI workflow.
-- [ ] Observe a successful CI run proving the import guard passes.
-  - Run #40 failed at the guard because test/benchmark Python files were scanned as production code.
-  - [x] Corrected guard scope to `src/` only.
-  - [x] Run #44 proved the corrected import guard passes; the run then failed during MQTT healthcheck.
-  - [x] Added CI-safe `POSTGRES_PASSWORD` to the workflow.
-  - [x] Fixed Mosquitto healthcheck Compose interpolation: `$SYS` is now escaped as `$${SYS}` so Compose does not erase the variable before the container shell evaluates it.
-  - [ ] New CI run on commit `b65468d` must complete successfully before the broader MQTT CI gate is marked DONE.
+- [x] Corrected guard scope to `src/` only; Run #44 proved the corrected import guard passes.
+- [x] Added CI-safe `POSTGRES_PASSWORD` to the workflow.
+- [x] Replaced fragile Mosquitto `$SYS/broker/uptime` healthcheck with a local `mosquitto_pub` broker-readiness probe.
+- [ ] Observe a successful CI broker run and capture result.
+  - Run #48 (2026-09-08 02:57 UTC) still failed at the old Mosquitto `$SYS` healthcheck before the new readiness probe commit.
+  - New commit `34446ab` contains the corrected readiness probe; a fresh CI run is required.
 - [x] Deterministic pgvector retrieval benchmark harness (synthetic, no biometric data).
 - [ ] Run benchmark under filtering and record recall/latency results (issue #3).
 - [ ] Benchmark candidate-first HNSW vs one-vector-per-person prototype architecture (issue #4).
