@@ -1,0 +1,44 @@
+name: pgvector retrieval benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "tools/benchmark_pgvector_retrieval.py"
+      - "scripts/init.sql"
+      - ".github/workflows/pgvector-benchmark.yml"
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_PASSWORD: ci
+      PG_DSN: postgresql://face_admin:ci@127.0.0.1:5432/face_recognition
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Start pgvector
+        run: docker compose up -d postgres
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            if docker compose exec -T postgres pg_isready -U face_admin -d face_recognition; then exit 0; fi
+            sleep 2
+          done
+          docker compose logs postgres
+          exit 1
+      - name: Install benchmark dependencies
+        run: python -m pip install --upgrade pip && python -m pip install numpy psycopg[binary]
+      - name: Baseline production query
+        run: python tools/benchmark_pgvector_retrieval.py --mode production --persons 1000 --templates 10 --queries 100 --top-k 10 --ef-search 100 --iterative-scan off
+      - name: Candidate-first HNSW
+        run: python tools/benchmark_pgvector_retrieval.py --mode candidate --persons 1000 --templates 10 --queries 100 --top-k 10 --ef-search 100 --iterative-scan off --oversample 20
+      - name: Candidate-first HNSW strict iterative scan
+        run: python tools/benchmark_pgvector_retrieval.py --mode candidate --persons 1000 --templates 10 --queries 100 --top-k 10 --ef-search 100 --iterative-scan strict_order --oversample 20
+      - name: Candidate-first HNSW relaxed iterative scan
+        run: python tools/benchmark_pgvector_retrieval.py --mode candidate --persons 1000 --templates 10 --queries 100 --top-k 10 --ef-search 100 --iterative-scan relaxed_order --oversample 20
+      - name: Stop PostgreSQL
+        if: always()
+        run: docker compose down -v
