@@ -53,7 +53,7 @@ def make_gallery(persons: int, templates: int, dim: int, seed: int) -> list[tupl
     for i in range(persons):
         base = rng.normal(size=dim).astype(np.float32)
         base /= np.linalg.norm(base)
-        for t in range(templates):
+        for _ in range(templates):
             noise = rng.normal(scale=0.03, size=dim).astype(np.float32)
             v = base + noise
             v /= np.linalg.norm(v)
@@ -119,6 +119,8 @@ def main() -> int:
         raise SystemExit("--active-ratio must be in (0, 1]")
     if args.oversample < 1:
         raise SystemExit("--oversample must be >= 1")
+    if args.ef_search < 1:
+        raise SystemExit("--ef-search must be >= 1")
 
     dsn = os.environ.get("PG_DSN", "postgresql://face_admin:ci@127.0.0.1:5432/face_recognition")
     rng = np.random.default_rng(args.seed)
@@ -141,11 +143,13 @@ def main() -> int:
         conn.commit()
 
         with conn.cursor() as cur:
-            cur.execute("SET hnsw.ef_search = %s", (args.ef_search,))
-            if args.iterative_scan == "off":
-                cur.execute("SET hnsw.iterative_scan = off")
-            else:
-                cur.execute("SET hnsw.iterative_scan = %s", (args.iterative_scan,))
+            # PostgreSQL does not accept bind parameters in SET's GUC value.
+            # set_config() keeps the benchmark parameterized without unsafe SQL interpolation.
+            cur.execute("SELECT set_config('hnsw.ef_search', %s, false)", (str(args.ef_search),))
+            cur.execute(
+                "SELECT set_config('hnsw.iterative_scan', %s, false)",
+                (args.iterative_scan,),
+            )
 
         recalls: list[float] = []
         latencies_ms: list[float] = []
