@@ -52,11 +52,12 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 - [x] Added static guard against direct imports of legacy `DatabaseClient`.
 - [x] Added the import-boundary guard to the CI workflow.
 - [ ] Observe a successful CI run proving the import guard passes.
-  - Run #40 (2026-09-08 00:03 UTC) failed at the guard because the guard scanned test/benchmark Python files as production code.
+  - Run #40 failed at the guard because test/benchmark Python files were scanned as production code.
   - [x] Corrected guard scope to `src/` only.
-  - [x] Run #44 (2026-09-08 08:56 local / 01:56 UTC) proves the corrected import guard passes, but the workflow still failed because `docker compose` did not receive the required `POSTGRES_PASSWORD` in that run's workflow revision.
-  - [x] Added a CI-safe `POSTGRES_PASSWORD` environment value to the workflow.
-  - [ ] Run #45 must complete successfully before the broader MQTT CI gate is marked DONE.
+  - [x] Run #44 proved the corrected import guard passes; the run then failed during MQTT healthcheck.
+  - [x] Added CI-safe `POSTGRES_PASSWORD` to the workflow.
+  - [x] Fixed Mosquitto healthcheck Compose interpolation: `$SYS` is now escaped as `$${SYS}` so Compose does not erase the variable before the container shell evaluates it.
+  - [ ] New CI run on commit `b65468d` must complete successfully before the broader MQTT CI gate is marked DONE.
 - [x] Deterministic pgvector retrieval benchmark harness (synthetic, no biometric data).
 - [ ] Run benchmark under filtering and record recall/latency results (issue #3).
 - [ ] Benchmark candidate-first HNSW vs one-vector-per-person prototype architecture (issue #4).
