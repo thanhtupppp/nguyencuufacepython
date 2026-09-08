@@ -57,6 +57,14 @@ jobs:
         run: python tools/benchmark_pgvector_retrieval.py --mode prototype_rerank --persons 1000 --templates 10 --queries 100 --top-k 10 --seed 20260910 --ef-search 100 --iterative-scan off --oversample 20
       - name: Candidate rerank seed 20260910
         run: python tools/benchmark_pgvector_retrieval.py --mode candidate_rerank --persons 1000 --templates 10 --queries 100 --top-k 10 --seed 20260910 --ef-search 100 --iterative-scan off --oversample 20
+      - name: Prototype rerank 1000 persons x 30 templates
+        run: python tools/benchmark_pgvector_retrieval.py --mode prototype_rerank --persons 1000 --templates 30 --queries 100 --top-k 10 --ef-search 100 --iterative-scan off --oversample 20
+      - name: Prototype rerank 10000 persons x 10 templates
+        run: python tools/benchmark_pgvector_retrieval.py --mode prototype_rerank --persons 10000 --templates 10 --queries 100 --top-k 10 --ef-search 100 --iterative-scan off --oversample 20
+      - name: Prototype rerank 10000 persons x 10 templates active 10 percent
+        run: python tools/benchmark_pgvector_retrieval.py --mode prototype_rerank --persons 10000 --templates 10 --queries 100 --top-k 10 --active-ratio 0.1 --ef-search 100 --iterative-scan off --oversample 20
+      - name: Prototype rerank 10000 persons x 10 templates oversample 100
+        run: python tools/benchmark_pgvector_retrieval.py --mode prototype_rerank --persons 10000 --templates 10 --queries 100 --top-k 10 --ef-search 100 --iterative-scan off --oversample 100
       - name: Stop PostgreSQL
         if: always()
         run: docker compose down -v
