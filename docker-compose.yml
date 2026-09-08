@@ -30,7 +30,7 @@ services:
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
     healthcheck:
-      test: ["CMD-SHELL", "mosquitto_sub -h 127.0.0.1 -p 1883 -t '$${SYS}/broker/uptime' -C 1 -W 3 >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "mosquitto_pub -h 127.0.0.1 -p 1883 -t '__healthcheck' -m ok >/dev/null 2>&1"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -39,6 +39,4 @@ volumes:
   pgdata:
     driver: local
   mosquitto_data:
-    driver: local
-  mosquitto_log:
     driver: local
