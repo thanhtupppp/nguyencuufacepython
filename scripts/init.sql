@@ -72,3 +72,13 @@ CREATE INDEX IF NOT EXISTS idx_face_embeddings_hnsw
 ON face_embeddings
 USING hnsw (embedding vector_cosine_ops)
 WITH (m = 16, ef_construction = 64);
+
+-- Keep the durable RecognitionEvent schema aligned with db/migrations/001_recognition_events.sql.
+CREATE TABLE IF NOT EXISTS recognition_events (
+    event_id UUID PRIMARY KEY,
+    payload JSONB NOT NULL,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_recognition_events_received_at
+ON recognition_events (received_at);
