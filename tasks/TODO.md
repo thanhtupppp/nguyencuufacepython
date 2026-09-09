@@ -17,6 +17,15 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 - [ ] Chạy benchmark thật và xuất metrics/ROC/report.
 - [ ] Khóa threshold + margin từ validation.
 
+### P0.1.2 Commercial-friendly model A/B — ACTIVE / PROTOCOL READY
+- [x] Candidate selected: OpenCV Zoo YuNet + SFace.
+- [x] Same-pipeline A/B protocol committed in `benchmarks/P0.1.2_model_ab_protocol.md`.
+- [x] Metrics and decision gate defined.
+- [ ] Pin exact model artifacts + SHA-256 + licenses.
+- [ ] Provide consented/authorized evaluation manifest.
+- [ ] Run real-image A/B benchmark.
+- [ ] Decide retain/reject/adopt based on false-match + accuracy + latency + licensing.
+
 ### P0.2 Quality Gate — IMPLEMENTED / CALIBRATION PENDING
 - [x] Face size, blur, brightness, pose.
 - [x] Unit tests.
@@ -103,4 +112,4 @@ Bảng theo dõi tiến độ thực tế. `[x]` chỉ có nghĩa implementation
 
 ## Current execution order
 
-P0.1 real-model benchmark (blocked on assets/data) -> P0.2 quality calibration -> P0.3 tracking benchmark -> P0.4 liveness benchmark (protocol ready; blocked on model/data) -> P1.1 verify successful CI run + vector recall benchmark (issue #3) + retrieval architecture benchmark (issue #4) -> P1.2 PostgreSQL-backed API integration -> P1.3 MQTT broker execution -> P2.1 PC CPU baseline -> P2.1 Raspberry Pi -> P2.1 Android -> P2.2 model A/B.
+P0.1.2 YuNet + SFace artifact/license gate -> P0.1 real SCRFD + ArcFace benchmark when licensed assets/data are available -> P0.2 quality calibration -> P0.3 tracking benchmark -> P0.4 liveness benchmark (protocol ready; blocked on model/data) -> P1.1 verify successful CI run + vector recall benchmark (issue #3) + retrieval architecture benchmark (issue #4) -> P1.2 PostgreSQL-backed API integration -> P1.3 MQTT broker execution -> P2.1 PC CPU baseline -> P2.1 Raspberry Pi -> P2.1 Android -> P2.2 model A/B.
