@@ -1,26 +1,33 @@
-schema_version: 1
+schema_version: 2
 artifacts:
   - id: facenox_minifasv2se_int8
     role: edge_challenger
     upstream:
       repo: https://github.com/facenox/face-antispoof-onnx
-      revision: main
+      revision: fa6489fb221dcf6b803095ab4b15a0fa0f56cfe5
       path: models/best_model_quantized.onnx
       license: Apache-2.0
     sha256: REPLACE_WITH_VERIFIED_SHA256
     input:
       size: [128, 128]
-      color: RGB
-      dtype: uint8
-      normalization: implementation_defined_until_verified
+      layout: CHW
+      declared_color: RGB
+      dtype: REQUIRES_ONNX_GRAPH_VERIFICATION
+      normalization: float32_div_255
+      resize: letterbox
+      interpolation: INTER_LANCZOS4_if_upscale_else_INTER_AREA
+      padding: BORDER_REFLECT_101
+      channel_conversion: NONE_IN_UPSTREAM_PREPROCESSOR_REQUIRES_CALLER_VERIFICATION
       crop: face_bbox_with_project_protocol
     output:
-      semantics: real_vs_spoof
-      score_direction: REQUIRES_VERIFICATION
+      shape: [N, 2]
+      semantics: class_0_real_class_1_spoof
+      score: real_logit_minus_spoof_logit
+      score_direction: higher_is_more_real
     evaluation:
       dataset: CelebA-Spoof
       protocol: project_holdout_only
-    status: pending_sha256_verification
+    status: pending_sha256_and_graph_verification
 
   - id: yakhyo_minifasv2
     role: reproducible_reference
