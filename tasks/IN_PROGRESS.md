@@ -20,6 +20,13 @@ Nhiệm vụ đang thực hiện:
 - [ ] Khóa threshold + top1-top2 margin từ validation.
 - [ ] Xuất FAR/FRR/EER/TAR và condition breakdown trên locked test.
 
+## 🔐 P0.1.3: Recognition model provenance + license gate
+- [x] Document exact provenance/license requirements for SCRFD + ArcFace.
+- [ ] Pin exact SCRFD artifact + SHA-256 + weight license evidence.
+- [ ] Pin exact ArcFace artifact + SHA-256 + weight license evidence.
+- [ ] Implement fail-closed recognition manifest verifier.
+- [ ] Connect verifier to FastAPI model registry.
+
 ## 🛡️ P0.4: Liveness empirical calibration
 - [ ] Benchmark genuine/live vs print/screen/replay attacks bằng model liveness thực.
 - [ ] Khóa threshold và inconclusive policy trên validation.
