@@ -4,22 +4,22 @@ from datetime import datetime, timezone
 from unittest.mock import Mock
 from uuid import uuid4
 
-from app.fastapi_contract import EventType, Liveness, Quality, RecognitionEvent
+from app.fastapi_contract import RecognitionEvent
 from app.mqtt_bridge import RecognitionEventMQTTBridge
 
 
 def sample_event() -> RecognitionEvent:
     return RecognitionEvent(
         event_id=uuid4(),
-        event_type=EventType.RECOGNITION_CONFIRMED,
         camera_id="cam-01",
         device_id="pi-01",
         track_id="track-7",
+        state="RECOGNITION_CONFIRMED",
         person_id="person-42",
         model_version="scrfd-arcface-v1",
         embedding_version="arcface-v1",
-        quality=Quality(score=0.93),
-        liveness=Liveness(score=0.99, passed=True),
+        quality=0.93,
+        liveness=0.99,
         similarity=0.88,
         margin=0.14,
         frames_confirmed=4,
