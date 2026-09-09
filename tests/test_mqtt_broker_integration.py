@@ -1,6 +1,5 @@
 import json
 import os
-import ssl
 import threading
 from uuid import uuid4
 
@@ -49,10 +48,9 @@ def test_canonical_event_round_trip_contract() -> None:
     publisher.connect(host, port, 60)
     publisher.loop_start()
 
-    event_id = str(uuid4())
     payload = {
         "schema_version": 1,
-        "event_id": event_id,
+        "event_id": str(uuid4()),
         "state": "RECOGNITION_CONFIRMED",
         "camera_id": "cam-integration",
         "device_id": "device-integration",
