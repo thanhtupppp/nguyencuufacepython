@@ -21,7 +21,16 @@ def setup_function() -> None:
 def test_healthz() -> None:
     response = client.get("/healthz")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["recognition"] in {"ready", "blocked"}
+
+
+def test_model_status_is_fail_closed_without_real_model() -> None:
+    response = client.get("/v1/models/status")
+    assert response.status_code in {200, 503}
+    body = response.json()
+    assert body["status"] in {"ready", "blocked"}
 
 
 def test_person_crud() -> None:
