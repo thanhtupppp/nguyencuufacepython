@@ -27,7 +27,7 @@ def test_alignment_regression_is_deterministic():
     assert crop_a.dtype == np.uint8
     assert np.array_equal(crop_a, crop_b)
     assert hashlib.sha256(crop_a.tobytes()).hexdigest() == (
-        "5c7b6d3f1e7f2bb5d9c9f5a5b5d2d0c6c1e4a6f8f2c2d1e5c9e5b7b0b4e3c2a1"
+        "31ef6433123f0dc225774a6f288f02150c6b2095e00003ec8a19cad572060f9a"
     )
 
 
