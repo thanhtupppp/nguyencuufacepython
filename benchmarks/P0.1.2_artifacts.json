@@ -1,0 +1,24 @@
+{
+  "task": "P0.1.2",
+  "status": "BLOCKED_ON_PINNED_ARTIFACTS_AND_AUTHORIZED_DATA",
+  "models": {
+    "yunet": {
+      "filename": "face_detection_yunet_2023mar.onnx",
+      "sha256": null,
+      "source_url": null,
+      "license_verified": false
+    },
+    "sface": {
+      "filename": "face_recognition_sface_2021dec.onnx",
+      "sha256": null,
+      "source_url": null,
+      "license_verified": false
+    }
+  },
+  "dataset": {
+    "manifest": null,
+    "authorization_verified": false,
+    "locked_test_split": false
+  },
+  "rule": "Do not run or report the A/B benchmark until exact model artifacts and an authorized evaluation manifest are pinned."
+}
