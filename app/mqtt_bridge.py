@@ -19,18 +19,21 @@ class RecognitionEventMQTTBridge:
         self._adapter = adapter
 
     def publish(self, event: RecognitionEvent):
+        if event.state != "RECOGNITION_CONFIRMED":
+            raise ValueError("only confirmed recognition events may be published")
+
         payload: dict[str, Any] = {
             "schema_version": 1,
             "event_id": str(event.event_id),
-            "event_type": event.event_type.value,
+            "state": event.state,
             "camera_id": event.camera_id,
             "device_id": event.device_id,
             "track_id": event.track_id,
             "person_id": event.person_id,
             "model_version": event.model_version,
             "embedding_version": event.embedding_version,
-            "quality": event.quality.model_dump(mode="json"),
-            "liveness": event.liveness.model_dump(mode="json"),
+            "quality": event.quality,
+            "liveness": event.liveness,
             "similarity": event.similarity,
             "margin": event.margin,
             "frames_confirmed": event.frames_confirmed,
