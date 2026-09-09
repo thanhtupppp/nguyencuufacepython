@@ -16,6 +16,19 @@ class EventRepository(Protocol):
     def put_if_absent(self, event_id: UUID, payload: dict[str, Any]) -> tuple[bool, dict[str, Any]]: ...
 
 
+class InMemoryEventRepository:
+    """Deterministic test double; never used as the production default."""
+
+    def __init__(self) -> None:
+        self._events: dict[UUID, dict[str, Any]] = {}
+
+    def put_if_absent(self, event_id: UUID, payload: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
+        if event_id in self._events:
+            return False, self._events[event_id]
+        self._events[event_id] = dict(payload)
+        return True, self._events[event_id]
+
+
 class PostgresEventRepository:
     def __init__(self, dsn: str):
         self.dsn = dsn
