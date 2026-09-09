@@ -6,6 +6,7 @@ from .routes.persons import router as persons_router
 from .routes.faces import router as faces_router
 from .routes.events import router as events_router
 from .routes.dispenser import router as dispenser_router
+from .dependencies import recognition_pipeline
 
 
 def create_app() -> FastAPI:
@@ -32,7 +33,16 @@ def create_app() -> FastAPI:
 
     @app.get("/healthz", tags=["health"])
     def healthz() -> dict[str, str]:
-        return {"status": "ok"}
+        return {
+            "status": "ok",
+            "recognition": "ready" if recognition_pipeline is not None else "blocked",
+        }
+
+    @app.get("/v1/models/status", tags=["health"])
+    def model_status() -> dict[str, str]:
+        if recognition_pipeline is None:
+            return {"status": "blocked", "reason": "real_model_asset_or_fingerprint_unavailable"}
+        return {"status": "ready"}
 
     return app
 
