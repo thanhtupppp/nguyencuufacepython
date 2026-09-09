@@ -1,8 +1,8 @@
 """Common anti-spoof benchmark runner.
 
-The runner is deliberately fail-closed: it requires a verified artifact manifest
-before loading a model. Dataset adapters are kept explicit so preprocessing and
-labels cannot silently drift between candidates.
+Fail-closed benchmark runner. Model I/O semantics come from the artifact
+manifest; no dtype, normalization, output index, or score direction is
+hard-coded in the evaluator.
 """
 from __future__ import annotations
 
@@ -26,6 +26,13 @@ class Sample:
     label: int  # 0=real, 1=attack
 
 
+def require_verified(value: object, field: str) -> str:
+    text = str(value or "").strip()
+    if not text or text.upper().startswith("REQUIRES_") or text.upper().startswith("IMPLEMENTATION_"):
+        raise RuntimeError(f"manifest field is not verified: {field}")
+    return text
+
+
 def load_manifest(path: pathlib.Path, artifact_dir: pathlib.Path) -> dict:
     data = yaml.safe_load(path.read_text())
     for item in data.get("artifacts", []):
@@ -43,7 +50,6 @@ def load_manifest(path: pathlib.Path, artifact_dir: pathlib.Path) -> dict:
 
 
 def read_samples(root: pathlib.Path) -> list[Sample]:
-    # Explicit directory contract: real/ and attack/ contain image files.
     samples: list[Sample] = []
     for label, name in ((0, "real"), (1, "attack")):
         directory = root / name
@@ -57,11 +63,41 @@ def read_samples(root: pathlib.Path) -> list[Sample]:
     return samples
 
 
-def prepare_128_rgb(image: np.ndarray) -> np.ndarray:
-    # Placeholder for the project-locked face crop/alignment adapter.
-    # It intentionally does not invent a detector/alignment policy.
-    resized = cv2.resize(image, (128, 128), interpolation=cv2.INTER_LINEAR)
-    return cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+def prepare_image(image: np.ndarray, item: dict) -> np.ndarray:
+    input_spec = item.get("input", {})
+    size = input_spec.get("size")
+    if not isinstance(size, list) or len(size) != 2:
+        raise RuntimeError("manifest input.size must be [width, height]")
+    color = require_verified(input_spec.get("color"), "input.color").upper()
+    dtype = require_verified(input_spec.get("dtype"), "input.dtype").lower()
+    normalization = require_verified(input_spec.get("normalization"), "input.normalization").lower()
+
+    resized = cv2.resize(image, (int(size[0]), int(size[1])), interpolation=cv2.INTER_LINEAR)
+    if color == "RGB":
+        prepared = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+    elif color == "BGR":
+        prepared = resized
+    else:
+        raise RuntimeError(f"unsupported input color: {color}")
+
+    if normalization == "0_1":
+        array = prepared.astype(np.float32) / 255.0
+    elif normalization == "-1_1":
+        array = prepared.astype(np.float32) / 127.5 - 1.0
+    elif normalization == "none":
+        array = prepared.astype(np.float32)
+    else:
+        raise RuntimeError(f"unsupported/unsafe normalization: {normalization}")
+
+    if dtype == "float32":
+        array = array.astype(np.float32)
+    elif dtype == "uint8":
+        if normalization != "none":
+            raise RuntimeError("uint8 input requires normalization=none")
+        array = array.astype(np.uint8)
+    else:
+        raise RuntimeError(f"unsupported input dtype: {dtype}")
+    return array
 
 
 def load_onnx(path: pathlib.Path):
@@ -69,16 +105,28 @@ def load_onnx(path: pathlib.Path):
     return ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
 
 
-def score(session, image: np.ndarray) -> float:
-    tensor = image.astype(np.float32) / 255.0
-    tensor = np.transpose(tensor, (2, 0, 1))[None, ...]
+def score(session, image: np.ndarray, item: dict) -> float:
+    input_spec = item.get("input", {})
+    output_spec = item.get("output", {})
+    tensor = np.transpose(image, (2, 0, 1))[None, ...]
     inp = session.get_inputs()[0]
-    output = session.run(None, {inp.name: tensor})[0]
-    flat = np.asarray(output).reshape(-1)
-    if flat.size < 2:
-        raise RuntimeError("FAS output must expose at least two scores")
-    # Project convention: index 1 is attack/spoof score.
-    return float(flat[1])
+    output = np.asarray(session.run(None, {inp.name: tensor})[0]).reshape(-1)
+    output_type = require_verified(output_spec.get("type"), "output.type").lower()
+    attack_index = int(require_verified(output_spec.get("attack_index"), "output.attack_index"))
+    direction = require_verified(output_spec.get("score_direction"), "output.score_direction").lower()
+    if output.size <= attack_index:
+        raise RuntimeError("output attack_index exceeds model output size")
+
+    if output_type == "logits":
+        if output.size != 2:
+            raise RuntimeError("logits output currently requires exactly two classes")
+        real_index = 1 - attack_index
+        raw = float(output[attack_index] - output[real_index])
+        return raw if direction == "higher_is_attack" else -raw
+    if output_type == "probability":
+        raw = float(output[attack_index])
+        return raw if direction == "higher_is_attack" else -raw
+    raise RuntimeError(f"unsupported output.type: {output_type}")
 
 
 def main() -> int:
@@ -105,9 +153,9 @@ def main() -> int:
         image = cv2.imread(str(sample.path))
         if image is None:
             raise RuntimeError(f"cannot decode image: {sample.path}")
-        prepared = prepare_128_rgb(image)
+        prepared = prepare_image(image, item)
         start = time.perf_counter()
-        attack_score = score(session, prepared)
+        attack_score = score(session, prepared, item)
         latencies_ms.append((time.perf_counter() - start) * 1000.0)
         y_true.append(sample.label)
         y_score.append(attack_score)
@@ -127,7 +175,13 @@ def main() -> int:
         "eer_threshold": float(thresholds[eer_idx]),
         "latency_ms_p50": float(np.percentile(latencies_ms, 50)),
         "latency_ms_p95": float(np.percentile(latencies_ms, 95)),
-        "preprocessing": "TEMPORARY_128_RGB_RESIZE_ONLY__NOT_PRODUCTION_ALIGNMENT",
+        "preprocessing": {
+            "size": item["input"]["size"],
+            "color": item["input"]["color"],
+            "dtype": item["input"]["dtype"],
+            "normalization": item["input"]["normalization"],
+        },
+        "output_contract": item["output"],
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + "\n")
