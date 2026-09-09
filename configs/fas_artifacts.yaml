@@ -1,0 +1,45 @@
+schema_version: 1
+artifacts:
+  - id: facenox_minifasv2se_int8
+    role: edge_challenger
+    upstream:
+      repo: https://github.com/facenox/face-antispoof-onnx
+      revision: main
+      path: models/best_model_quantized.onnx
+      license: Apache-2.0
+    sha256: REPLACE_WITH_VERIFIED_SHA256
+    input:
+      size: [128, 128]
+      color: RGB
+      dtype: uint8
+      normalization: implementation_defined_until_verified
+      crop: face_bbox_with_project_protocol
+    output:
+      semantics: real_vs_spoof
+      score_direction: REQUIRES_VERIFICATION
+    evaluation:
+      dataset: CelebA-Spoof
+      protocol: project_holdout_only
+    status: pending_sha256_verification
+
+  - id: yakhyo_minifasv2
+    role: reproducible_reference
+    upstream:
+      repo: https://github.com/yakhyo/face-anti-spoofing
+      revision: main
+      path: weights/MiniFASNetV2.onnx
+      license: REQUIRES_WEIGHT_LICENSE_VERIFICATION
+    sha256: REPLACE_WITH_VERIFIED_SHA256
+    input:
+      size: [128, 128]
+      color: RGB
+      dtype: float32
+      normalization: REQUIRES_VERIFICATION
+      crop: face_bbox_with_project_protocol
+    output:
+      semantics: real_vs_spoof
+      score_direction: REQUIRES_VERIFICATION
+    evaluation:
+      dataset: CelebA-Spoof
+      protocol: project_holdout_only
+    status: pending_sha256_verification
