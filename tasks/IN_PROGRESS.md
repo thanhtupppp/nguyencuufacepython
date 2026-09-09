@@ -25,9 +25,15 @@ Nhiệm vụ đang thực hiện:
 - [ ] Pin exact SCRFD artifact + SHA-256 + weight license evidence.
 - [ ] Pin exact ArcFace artifact + SHA-256 + weight license evidence.
 - [ ] Implement fail-closed recognition manifest verifier.
-- [ ] Connect verifier to FastAPI model registry.
+- [ ] Connect verifier to the actual `src/recognition/model_registry.py` + `src/api/recognition_runtime.py`.
+- [ ] Do not count the temporary duplicate `app/model_registry.py` experiment as production integration; it was removed to keep one canonical runtime.
 
 ## 🛡️ P0.4: Liveness empirical calibration
 - [ ] Benchmark genuine/live vs print/screen/replay attacks bằng model liveness thực.
 - [ ] Khóa threshold và inconclusive policy trên validation.
 - [ ] Đo APCER/BPCER/ACER hoặc tương đương theo attack condition.
+
+## 🧭 Next selected task
+**P0.1.3.2 — integrate the provenance/license manifest gate into the canonical `src/recognition/model_registry.py` + `src/api/recognition_runtime.py`, then expose deterministic readiness through FastAPI.**
+
+Acceptance: an unverified SCRFD/ArcFace artifact cannot initialize the recognition pipeline; a verified artifact must satisfy SHA-256, 512-D embedding contract, and provenance/license fields before runtime readiness is reported.
