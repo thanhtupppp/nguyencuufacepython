@@ -34,7 +34,12 @@ Nhiệm vụ đang thực hiện:
 - [ ] Khóa threshold và inconclusive policy trên validation.
 - [ ] Đo APCER/BPCER/ACER hoặc tương đương theo attack condition.
 
-## 🧭 Next selected task
-**P0.1.3.3 — pin the actual authorized SCRFD + ArcFace artifacts, then execute the real-model integration/benchmark gate.**
+## 🎚️ P0.2: Real-image quality gate calibration
+- [x] Define deterministic quality-feature, decision-state, and reason-code contract.
+- [x] Add versioned engineering-default quality configuration; explicitly marked calibration-required.
+- [ ] P0.2.2: run real SCRFD fixture + authorized person-disjoint dataset and calibrate thresholds.
 
-Acceptance: exact model files are available, SHA-256 and weight-license evidence are recorded, the canonical registry verifies both detector and recognizer, FastAPI readiness is `ready` only after both pass, and the benchmark produces reproducible FAR/FRR/EER/TAR results on a locked validation/test protocol.
+## 🧭 Next selected task
+**P0.2.2 — real-image quality distribution + calibration.**
+
+Reason: P0.1.3.3 is blocked by missing authorized SCRFD/ArcFace binaries and weight-license evidence. P0.2 can advance its deterministic feature contract and prepare calibration without inventing model accuracy results. Acceptance: real SCRFD fixture and authorized person-disjoint manifest are available; feature distributions are measured by camera/device/condition; ACCEPT/REVIEW/REJECT thresholds are selected on validation only; locked-test evidence reports false reject/rejection rates and recognition false-match impact.
