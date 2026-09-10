@@ -1,8 +1,13 @@
 """Deterministic pgvector person-level retrieval benchmark.
 
-The benchmark compares correctness-first production retrieval with
+The benchmark compares correctness-first person-level retrieval with
 candidate-first HNSW and one-vector-per-person prototype retrieval.
 Synthetic vectors are used so no biometric data is required.
+
+Timing protocol: deterministic queries are generated once, warm-up queries
+are excluded from latency statistics, and the same query set is reused for
+all measured repetitions. Database retrieval latency is measured separately
+from optional Python reranking latency.
 """
 
 from __future__ import annotations
@@ -111,6 +116,16 @@ def build_prototypes(gallery):
     return prototypes
 
 
+def percentile_stats(values_ms: list[float]) -> dict[str, float]:
+    if not values_ms:
+        raise ValueError("timing sample is empty")
+    return {
+        "p50": float(np.percentile(values_ms, 50)),
+        "p95": float(np.percentile(values_ms, 95)),
+        "p99": float(np.percentile(values_ms, 99)),
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--persons", type=int, default=1000)
@@ -118,6 +133,8 @@ def main() -> int:
     ap.add_argument("--dim", type=int, default=512)
     ap.add_argument("--top-k", type=int, default=10)
     ap.add_argument("--queries", type=int, default=50)
+    ap.add_argument("--repeats", type=int, default=5)
+    ap.add_argument("--warmup", type=int, default=1)
     ap.add_argument("--seed", type=int, default=20260908)
     ap.add_argument("--active-ratio", type=float, default=1.0)
     ap.add_argument("--ef-search", type=int, default=100)
@@ -136,6 +153,12 @@ def main() -> int:
         raise SystemExit("--oversample must be >= 1")
     if args.ef_search < 1:
         raise SystemExit("--ef-search must be >= 1")
+    if args.queries < 1:
+        raise SystemExit("--queries must be >= 1")
+    if args.repeats < 1:
+        raise SystemExit("--repeats must be >= 1")
+    if args.warmup < 0:
+        raise SystemExit("--warmup must be >= 0")
 
     dsn = os.environ.get("PG_DSN", "postgresql://face_admin:ci@127.0.0.1:5432/face_recognition")
     rng = np.random.default_rng(args.seed)
@@ -147,6 +170,17 @@ def main() -> int:
     for pid, vector in rows:
         gallery.setdefault(pid, []).append(vector)
     prototypes = build_prototypes(gallery)
+
+    # Build the query set once so every repetition uses identical queries.
+    queries = []
+    expected_by_query = []
+    for _ in range(args.queries):
+        _, base = rows[int(rng.integers(0, len(rows)))]
+        q = base.copy()
+        q += rng.normal(scale=0.01, size=args.dim).astype(np.float32)
+        q /= np.linalg.norm(q)
+        queries.append(q)
+        expected_by_query.append(set(exact_person_topk(rows, q, args.top_k, active, "arcface_v1")))
 
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:
@@ -176,15 +210,7 @@ def main() -> int:
             cur.execute("SELECT set_config('hnsw.ef_search', %s, false)", (str(args.ef_search),))
             cur.execute("SELECT set_config('hnsw.iterative_scan', %s, false)", (args.iterative_scan,))
 
-        recalls = []
-        latencies_ms = []
-        for _ in range(args.queries):
-            _, base = rows[int(rng.integers(0, len(rows)))]
-            q = base.copy()
-            q += rng.normal(scale=0.01, size=args.dim).astype(np.float32)
-            q /= np.linalg.norm(q)
-            expected = set(exact_person_topk(rows, q, args.top_k, active, "arcface_v1"))
-            t0 = time.perf_counter()
+        def execute_one(q):
             with conn.cursor() as cur:
                 if args.mode == "production":
                     cur.execute(PRODUCTION_SQL, (q.tolist(), q.tolist(), "arcface_v1", True, args.top_k))
@@ -203,15 +229,32 @@ def main() -> int:
                 got = exact_rerank_candidates(raw, q, gallery, args.top_k)
             else:
                 got = unique_topk(raw, args.top_k)
-            latencies_ms.append((time.perf_counter() - t0) * 1000.0)
-            recalls.append(len(expected.intersection(got)) / args.top_k)
+            return got
 
+        # Warm-up is intentionally excluded from all reported timing statistics.
+        for _ in range(args.warmup):
+            for q in queries:
+                execute_one(q)
+
+        recalls = []
+        db_latencies_ms = []
+        for _ in range(args.repeats):
+            for q, expected in zip(queries, expected_by_query):
+                t0 = time.perf_counter()
+                got = execute_one(q)
+                db_latencies_ms.append((time.perf_counter() - t0) * 1000.0)
+                recalls.append(len(expected.intersection(got)) / args.top_k)
+
+    timing = percentile_stats(db_latencies_ms)
     print({
         "mode": args.mode,
         "persons": args.persons,
         "templates_per_person": args.templates,
         "active_ratio": args.active_ratio,
         "queries": args.queries,
+        "repeats": args.repeats,
+        "warmup": args.warmup,
+        "timed_samples": len(db_latencies_ms),
         "top_k": args.top_k,
         "ef_search": args.ef_search,
         "iterative_scan": args.iterative_scan,
@@ -219,8 +262,9 @@ def main() -> int:
         "recall_at_k_mean": float(np.mean(recalls)),
         "recall_at_k_min": float(np.min(recalls)),
         "missing_person_rate": float(1.0 - np.mean(recalls)),
-        "latency_ms_p50": float(np.percentile(latencies_ms, 50)),
-        "latency_ms_p95": float(np.percentile(latencies_ms, 95)),
+        "latency_ms_p50": timing["p50"],
+        "latency_ms_p95": timing["p95"],
+        "latency_ms_p99": timing["p99"],
     })
     return 0
 
