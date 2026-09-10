@@ -8,6 +8,7 @@ from .routes.events import router as events_router
 from .routes.dispenser import router as dispenser_router
 from .dependencies import db, recognition_pipeline
 from .readiness import ReadinessGate
+from src.database.readiness import probe_postgres_pgvector
 
 
 def build_readiness_gate() -> ReadinessGate:
@@ -19,8 +20,9 @@ def build_readiness_gate() -> ReadinessGate:
     detail = "initialized" if pipeline_ready else "real_model_asset_or_fingerprint_unavailable"
     for name in ("scrfd", "arcface", "alignment", "fas", "model_provenance"):
         gate.set_status(name, pipeline_ready, detail)
-    db_ready = db is not None and os.getenv("VECTOR_DB_READY", "0").strip() == "1"
-    gate.set_status("vector_db", db_ready, "verified" if db_ready else "backend_not_verified")
+
+    db_ready, db_detail = probe_postgres_pgvector(db)
+    gate.set_status("vector_db", db_ready, db_detail)
     return gate
 
 
