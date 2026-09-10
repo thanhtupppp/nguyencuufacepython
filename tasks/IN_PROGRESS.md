@@ -24,9 +24,10 @@ Nhiệm vụ đang thực hiện:
 - [x] Document exact provenance/license requirements for SCRFD + ArcFace.
 - [ ] Pin exact SCRFD artifact + SHA-256 + weight license evidence.
 - [ ] Pin exact ArcFace artifact + SHA-256 + weight license evidence.
-- [ ] Implement fail-closed recognition manifest verifier.
-- [ ] Connect verifier to the actual `src/recognition/model_registry.py` + `src/api/recognition_runtime.py`.
-- [ ] Do not count the temporary duplicate `app/model_registry.py` experiment as production integration; it was removed to keep one canonical runtime.
+- [x] Implement fail-closed recognition manifest verifier in canonical registry.
+- [x] Connect provenance/license gate to `src/recognition/model_registry.py` + `src/api/recognition_runtime.py`.
+- [x] Add fail-closed provenance/asset/512-D test matrix.
+- [x] Do not count the temporary duplicate `app/model_registry.py` experiment as production integration; it was removed to keep one canonical runtime.
 
 ## 🛡️ P0.4: Liveness empirical calibration
 - [ ] Benchmark genuine/live vs print/screen/replay attacks bằng model liveness thực.
@@ -34,6 +35,6 @@ Nhiệm vụ đang thực hiện:
 - [ ] Đo APCER/BPCER/ACER hoặc tương đương theo attack condition.
 
 ## 🧭 Next selected task
-**P0.1.3.2 — integrate the provenance/license manifest gate into the canonical `src/recognition/model_registry.py` + `src/api/recognition_runtime.py`, then expose deterministic readiness through FastAPI.**
+**P0.1.3.3 — pin the actual authorized SCRFD + ArcFace artifacts, then execute the real-model integration/benchmark gate.**
 
-Acceptance: an unverified SCRFD/ArcFace artifact cannot initialize the recognition pipeline; a verified artifact must satisfy SHA-256, 512-D embedding contract, and provenance/license fields before runtime readiness is reported.
+Acceptance: exact model files are available, SHA-256 and weight-license evidence are recorded, the canonical registry verifies both detector and recognizer, FastAPI readiness is `ready` only after both pass, and the benchmark produces reproducible FAR/FRR/EER/TAR results on a locked validation/test protocol.
