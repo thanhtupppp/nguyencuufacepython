@@ -1,0 +1,28 @@
+{
+  "quality_gate_version": "1.0.0",
+  "status": "calibration_required",
+  "decision_states": ["ACCEPT", "REJECT", "REVIEW"],
+  "reason_code_order": [
+    "INVALID_BBOX_COORDINATES",
+    "INVALID_LANDMARKS",
+    "FACE_TOO_SMALL",
+    "BLURRY_FACE",
+    "UNDER_EXPOSED",
+    "OVER_EXPOSED",
+    "EXTREME_YAW",
+    "EXTREME_PITCH",
+    "EXTREME_ROLL",
+    "MASK_DETECTED",
+    "OCCLUDED_FACE"
+  ],
+  "thresholds": {
+    "min_face_size_px": 60,
+    "blur_laplacian_variance": 20.0,
+    "max_yaw_deg": 35.0,
+    "max_pitch_deg": 35.0,
+    "max_roll_deg": 30.0,
+    "min_brightness": 30.0,
+    "max_brightness": 230.0
+  },
+  "notes": "Initial engineering defaults only. Must be calibrated on person-disjoint authorized data before production use."
+}
