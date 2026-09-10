@@ -33,7 +33,7 @@ artifacts:
     role: reproducible_reference
     upstream:
       repo: https://github.com/yakhyo/face-anti-spoofing
-      revision: main
+      revision: aea85c1fa14e4d52a7910af75d59ef51e62a2267
       path: weights/MiniFASNetV2.onnx
       license: REQUIRES_WEIGHT_LICENSE_VERIFICATION
     sha256: REPLACE_WITH_VERIFIED_SHA256
