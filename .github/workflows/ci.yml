@@ -28,6 +28,7 @@ jobs:
       POSTGRES_DB: face_recognition
       POSTGRES_USER: face_admin
       POSTGRES_PASSWORD: face_secure_password_2026
+      DATABASE_URL: postgresql://face_admin:face_secure_password_2026@localhost:5432/face_recognition
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
