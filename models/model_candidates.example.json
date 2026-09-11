@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "candidates": [
+    {
+      "component": "detector",
+      "model_id": "scrfd",
+      "model_version": "PIN_REQUIRED",
+      "artifact_filename": "PIN_REQUIRED",
+      "input_contract": "PIN_REQUIRED",
+      "output_contract": "boxes + 5-point landmarks",
+      "sha256": "PIN_REQUIRED",
+      "source_url": "PIN_REQUIRED",
+      "publisher": "InsightFace",
+      "license": "REVIEW_REQUIRED",
+      "commercial_use": "unknown",
+      "runtime": "onnxruntime_cpu",
+      "notes": "Baseline detector candidate; do not treat as production-approved until artifact and license are verified."
+    },
+    {
+      "component": "recognition",
+      "model_id": "arcface",
+      "model_version": "PIN_REQUIRED",
+      "artifact_filename": "PIN_REQUIRED",
+      "input_contract": "112x112 aligned face",
+      "output_contract": "512-D embedding; finite; L2-normalized",
+      "sha256": "PIN_REQUIRED",
+      "source_url": "PIN_REQUIRED",
+      "publisher": "InsightFace",
+      "license": "REVIEW_REQUIRED",
+      "commercial_use": "unknown",
+      "runtime": "onnxruntime_cpu",
+      "notes": "Baseline recognition candidate; do not treat as production-approved until artifact and license are verified."
+    }
+  ]
+}
