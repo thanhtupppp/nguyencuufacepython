@@ -1,35 +1,35 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "candidates": [
     {
       "component": "detector",
-      "model_id": "scrfd",
-      "model_version": "PIN_REQUIRED",
-      "artifact_filename": "PIN_REQUIRED",
-      "input_contract": "PIN_REQUIRED",
-      "output_contract": "boxes + 5-point landmarks",
-      "sha256": "PIN_REQUIRED",
-      "source_url": "PIN_REQUIRED",
+      "model_id": "scrfd_det_10g",
+      "model_version": "insightface-v0.7/buffalo_l",
+      "artifact_filename": "det_10g.onnx",
+      "input_contract": "BGR image tensor; detector runtime contract to be verified from ONNX graph",
+      "output_contract": "face boxes + 5-point landmarks",
+      "sha256": "PIN_AFTER_ARTIFACT_DOWNLOAD",
+      "source_url": "https://github.com/deepinsight/insightface/releases/tag/v0.7",
       "publisher": "InsightFace",
-      "license": "REVIEW_REQUIRED",
+      "license": "InsightFace pretrained-model policy; explicit production license review required",
       "commercial_use": "unknown",
       "runtime": "onnxruntime_cpu",
-      "notes": "Baseline detector candidate; do not treat as production-approved until artifact and license are verified."
+      "notes": "Official v0.7 buffalo_l package candidate. Do not treat as production-approved until exact artifact bytes, SHA-256, ONNX contract, and commercial licensing are verified."
     },
     {
       "component": "recognition",
-      "model_id": "arcface",
-      "model_version": "PIN_REQUIRED",
-      "artifact_filename": "PIN_REQUIRED",
+      "model_id": "arcface_w600k_r50",
+      "model_version": "insightface-v0.7/buffalo_l",
+      "artifact_filename": "w600k_r50.onnx",
       "input_contract": "112x112 aligned face",
-      "output_contract": "512-D embedding; finite; L2-normalized",
-      "sha256": "PIN_REQUIRED",
-      "source_url": "PIN_REQUIRED",
+      "output_contract": "512-D embedding; finite; L2-normalized by project contract",
+      "sha256": "PIN_AFTER_ARTIFACT_DOWNLOAD",
+      "source_url": "https://github.com/deepinsight/insightface/releases/tag/v0.7",
       "publisher": "InsightFace",
-      "license": "REVIEW_REQUIRED",
+      "license": "InsightFace pretrained-model policy; explicit production license review required",
       "commercial_use": "unknown",
       "runtime": "onnxruntime_cpu",
-      "notes": "Baseline recognition candidate; do not treat as production-approved until artifact and license are verified."
+      "notes": "Official v0.7 buffalo_l ArcFace candidate. Do not treat as production-approved until exact artifact bytes, SHA-256, ONNX contract, and commercial licensing are verified."
     }
   ]
 }
