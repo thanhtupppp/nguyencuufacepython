@@ -49,12 +49,47 @@ class BaseFaceRecognizer(ABC):
         """
         Batch extraction of feature vectors.
         Default implementation iterates over list. Subclasses may optimize with batched tensor inference.
-
-        :param aligned_faces: list of (112, 112, 3) numpy arrays
-        :return: (N, embedding_dim) float32 array
         """
         embeddings = [self.extract_embedding(f) for f in aligned_faces]
         return np.vstack(embeddings)
+
+    @staticmethod
+    def validate_embedding(
+        embedding: np.ndarray,
+        expected_dim: int = 512,
+        norm_tolerance: float = 1e-3,
+    ) -> np.ndarray:
+        """Validate and normalize the persisted recognition embedding contract.
+
+        Rejects malformed, non-finite, zero/near-zero, or wrong-dimensional vectors.
+        Returns a float32 unit vector suitable for cosine similarity / pgvector.
+        """
+        array = np.asarray(embedding)
+        if array.ndim not in (1, 2):
+            raise ValueError("Embedding must be a 1D vector or 2D batch")
+        if array.shape[-1] != expected_dim:
+            raise ValueError(f"Expected {expected_dim}-D embedding, got {array.shape[-1]}-D")
+        if not np.issubdtype(array.dtype, np.number):
+            raise ValueError("Embedding must contain numeric values")
+        array = array.astype(np.float32, copy=False)
+        if not np.all(np.isfinite(array)):
+            raise ValueError("Embedding contains NaN or Inf")
+        if array.ndim == 1:
+            norm = float(np.linalg.norm(array))
+            if norm <= 1e-10:
+                raise ValueError("Embedding norm is zero/near-zero")
+            normalized = array / norm
+        else:
+            norms = np.linalg.norm(array, axis=1, keepdims=True)
+            if np.any(norms <= 1e-10):
+                raise ValueError("Batch contains zero/near-zero embedding")
+            normalized = array / norms
+        if not np.all(np.isfinite(normalized)):
+            raise ValueError("Normalized embedding contains NaN or Inf")
+        norms_after = np.linalg.norm(normalized, axis=-1)
+        if not np.all(np.abs(norms_after - 1.0) <= norm_tolerance):
+            raise ValueError("Embedding L2 normalization contract violated")
+        return normalized.astype(np.float32, copy=False)
 
     @staticmethod
     def l2_normalize(embedding: np.ndarray, eps: float = 1e-10) -> np.ndarray:
