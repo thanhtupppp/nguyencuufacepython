@@ -37,9 +37,10 @@ Nhiệm vụ đang thực hiện:
 ## 🎚️ P0.2: Real-image quality gate calibration
 - [x] Define deterministic quality-feature, decision-state, and reason-code contract.
 - [x] Add versioned engineering-default quality configuration; explicitly marked calibration-required.
-- [ ] P0.2.2: run real SCRFD fixture + authorized person-disjoint dataset and calibrate thresholds.
+- [x] P0.2.2 calibration protocol + leakage-safe analyzer implemented.
+- [ ] P0.2.2 run with real SCRFD fixture + authorized person-disjoint dataset and calibrate thresholds.
 
 ## 🧭 Next selected task
-**P0.2.2 — real-image quality distribution + calibration.**
+**P0.2.2 — execute on real SCRFD outputs + authorized person-disjoint dataset.**
 
-Reason: P0.1.3.3 is blocked by missing authorized SCRFD/ArcFace binaries and weight-license evidence. P0.2 can advance its deterministic feature contract and prepare calibration without inventing model accuracy results. Acceptance: real SCRFD fixture and authorized person-disjoint manifest are available; feature distributions are measured by camera/device/condition; ACCEPT/REVIEW/REJECT thresholds are selected on validation only; locked-test evidence reports false reject/rejection rates and recognition false-match impact.
+Current blocker: the GitHub tree exposes only model manifest/README under `models/`; the actual SCRFD/ArcFace checkpoint artifacts and authorized image manifest are not available through the repository connection. The analyzer now refuses person leakage and separates calibration/validation/locked-test, but no accuracy or threshold result is claimed until real data is supplied and executed.
