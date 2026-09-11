@@ -45,9 +45,11 @@ Nhiệm vụ đang thực hiện:
 - [x] Identify root causes in CI run #35: missing repository-root import path and missing `DATABASE_URL` during test collection.
 - [x] Add `pythonpath = .` to pytest configuration.
 - [x] Provide `DATABASE_URL` from the CI PostgreSQL service.
-- [ ] Fresh CI run must pass unit collection/execution and then run integration tests.
+- [x] Identify second CI failure in run #39: missing `src.database.person_level_query` module required by person-level query regression tests.
+- [x] Restore `src/database/person_level_query.py` with parameterized person-level ranking SQL and active-only contract.
+- [ ] Fresh CI run on the repair commit must pass unit collection/execution and then run integration tests.
 
 ## 🧭 Next selected task
-**P0.4.28 — verify the CI collection fix with a fresh successful run; then resume the highest-value blocked real-model/data execution gate.**
+**P0.4.28 — verify the repair commit with a fresh successful CI run; if green, immediately execute the highest-value blocked real-model/data gate.**
 
-Current blockers after the CI fix: actual licensed SCRFD/ArcFace checkpoint bytes and authorized evaluation image bytes are still not available through the repository connection. P0.2.3 closes the data-manifest validation side, while P0.4.25–P0.4.27 define reproducible model acquisition/provenance/ONNX-contract checks. No recognition threshold, quality threshold, or model architecture change is accepted without real execution evidence.
+Current blockers: CI run #39 failed because `tests/unit/test_person_level_query.py` imported a missing `src.database.person_level_query` module; this has now been restored. Actual licensed SCRFD/ArcFace checkpoint bytes and authorized evaluation image bytes are still not available through the repository connection. P0.2.3 closes the data-manifest validation side, while P0.4.25–P0.4.27 define reproducible model acquisition/provenance/ONNX-contract checks. No recognition threshold, quality threshold, or model architecture change is accepted without real execution evidence.
