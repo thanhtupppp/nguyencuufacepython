@@ -39,8 +39,9 @@ Nhiệm vụ đang thực hiện:
 - [x] Add versioned engineering-default quality configuration; explicitly marked calibration-required.
 - [x] P0.2.2 calibration protocol + leakage-safe analyzer implemented.
 - [ ] P0.2.2 run with real SCRFD fixture + authorized person-disjoint dataset and calibrate thresholds.
+- [x] P0.2.3 authorized dataset manifest contract + fail-closed validator implemented.
 
 ## 🧭 Next selected task
-**P0.2.2 — execute on real SCRFD outputs + authorized person-disjoint dataset.**
+**P0.2.3 — validate an authorized person-disjoint image manifest, then execute P0.2.2 when real SCRFD artifacts and dataset bytes are available.**
 
-Current blocker: the GitHub tree exposes only model manifest/README under `models/`; the actual SCRFD/ArcFace checkpoint artifacts and authorized image manifest are not available through the repository connection. The analyzer now refuses person leakage and separates calibration/validation/locked-test, but no accuracy or threshold result is claimed until real data is supplied and executed.
+Current blockers: the GitHub tree exposes only model manifest/README under `models/`; actual SCRFD/ArcFace checkpoint artifacts and authorized image bytes are not available through the repository connection. P0.2.3 now closes the data-manifest side: unique image IDs/paths, per-image SHA-256, authorization reference, split validation, path-safety, and person-disjoint enforcement. No quality threshold or recognition result is claimed until real artifacts and authorized data are executed.
