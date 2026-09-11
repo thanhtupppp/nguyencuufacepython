@@ -41,7 +41,13 @@ Nhiệm vụ đang thực hiện:
 - [ ] P0.2.2 run with real SCRFD fixture + authorized person-disjoint dataset and calibrate thresholds.
 - [x] P0.2.3 authorized dataset manifest contract + fail-closed validator implemented.
 
-## 🧭 Next selected task
-**P0.2.3 — validate an authorized person-disjoint image manifest, then execute P0.2.2 when real SCRFD artifacts and dataset bytes are available.**
+## 🧪 P0.4.28: CI collection regression hardening
+- [x] Identify root causes in CI run #35: missing repository-root import path and missing `DATABASE_URL` during test collection.
+- [x] Add `pythonpath = .` to pytest configuration.
+- [x] Provide `DATABASE_URL` from the CI PostgreSQL service.
+- [ ] Fresh CI run must pass unit collection/execution and then run integration tests.
 
-Current blockers: the GitHub tree exposes only model manifest/README under `models/`; actual SCRFD/ArcFace checkpoint artifacts and authorized image bytes are not available through the repository connection. P0.2.3 now closes the data-manifest side: unique image IDs/paths, per-image SHA-256, authorization reference, split validation, path-safety, and person-disjoint enforcement. No quality threshold or recognition result is claimed until real artifacts and authorized data are executed.
+## 🧭 Next selected task
+**P0.4.28 — verify the CI collection fix with a fresh successful run; then resume the highest-value blocked real-model/data execution gate.**
+
+Current blockers after the CI fix: actual licensed SCRFD/ArcFace checkpoint bytes and authorized evaluation image bytes are still not available through the repository connection. P0.2.3 closes the data-manifest validation side, while P0.4.25–P0.4.27 define reproducible model acquisition/provenance/ONNX-contract checks. No recognition threshold, quality threshold, or model architecture change is accepted without real execution evidence.
