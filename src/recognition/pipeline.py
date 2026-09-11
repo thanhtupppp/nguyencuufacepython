@@ -88,13 +88,9 @@ class RecognitionPipeline:
             image, np.asarray(detection["landmarks"], dtype=np.float32)
         )
         embedding = self.recognizer.extract_embedding(aligned)
-
-        if embedding.shape != (self.recognizer.embedding_dim,):
-            raise ValueError(
-                f"INVALID_EMBEDDING_SHAPE: expected {(self.recognizer.embedding_dim,)}, got {embedding.shape}"
-            )
-        if not np.isfinite(embedding).all():
-            raise ValueError("INVALID_EMBEDDING_VALUES")
+        embedding = BaseFaceRecognizer.validate_embedding(
+            embedding, expected_dim=self.recognizer.embedding_dim
+        )
 
         return FaceEmbeddingResult(
             embedding=embedding,
