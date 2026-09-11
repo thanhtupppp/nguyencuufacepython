@@ -36,11 +36,11 @@ def _database_client_from_env() -> DatabaseClient:
 def test_postgres_search_returns_top_k_people_not_embedding_rows():
     """One person's many templates must not hide the second-best person."""
     if psycopg is None:
-        pytest.skip("psycopg is not installed")
+        pytest.fail("psycopg is required for integration tests")
 
     db = _database_client_from_env()
     if db.use_memory or db._conn is None:
-        pytest.skip("PostgreSQL/pgvector is not available")
+        pytest.fail("PostgreSQL/pgvector is required; integration test must not silently skip")
 
     try:
         with db._conn.cursor() as cur:
