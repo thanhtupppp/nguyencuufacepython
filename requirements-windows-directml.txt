@@ -1,0 +1,3 @@
+# Windows GPU runtime (optional)
+# Use this instead of the portable CPU runtime when DirectML is required.
+onnxruntime-directml>=1.18.0
