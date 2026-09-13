@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from app.event_repository import EventRepository, InMemoryEventRepository, PostgresEventRepository
 from app.fastapi_contract import RecognitionEvent
 from src.contracts.error import error_envelope
-from src.observability.request_context import new_request_id, set_request_id
+from src.observability.request_context import get_request_id, new_request_id, set_request_id
 from src.health.runtime import RuntimeLifecycle
 
 
@@ -66,6 +66,7 @@ def create_app(
 
     @app.post("/v1/events")
     def ingest_event(event: RecognitionEvent):
+        request_id = get_request_id() or new_request_id()
         try:
             accepted, payload = repository.put_if_absent(event.event_id, event.model_dump(mode="json"))
         except Exception:
@@ -75,7 +76,7 @@ def create_app(
             )
         return JSONResponse(
             status_code=202 if accepted else 200,
-            content={"status": "accepted" if accepted else "duplicate", "event": payload, "request_id": new_request_id()},
+            content={"status": "accepted" if accepted else "duplicate", "event": payload, "request_id": request_id},
         )
 
     @app.websocket("/v1/events/ws")
@@ -107,15 +108,13 @@ def create_app(
     return app
 
 
-# Importing this module never opens a database/model/MQTT connection. Production
-# bootstrapping supplies dependencies explicitly and owns them through lifespan.
-
 def _production_repository() -> EventRepository:
+    """Create the production repository on explicit application startup."""
     database_url = os.getenv("DATABASE_URL", "").strip()
     if not database_url:
         raise RuntimeError("DATABASE_URL must be configured when starting the production server")
     return PostgresEventRepository(database_url)
 
 
-# Keep the conventional ASGI export while avoiding import-time network I/O.
+# Conventional ASGI export for test/inspection imports; it performs no network IO.
 app = create_app(InMemoryEventRepository())
