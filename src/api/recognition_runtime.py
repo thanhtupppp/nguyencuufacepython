@@ -20,14 +20,14 @@ def _required_env(name: str) -> str:
 
 
 def build_recognition_pipeline() -> RecognitionPipeline:
-    """Create the production pipeline only from explicitly approved assets.
-
-    Both ArcFace and SCRFD are provenance-gated. Missing SHA/license/provenance
-    metadata, missing files, or fingerprint mismatches prevent initialization.
-    """
+    """Create production recognition only from explicitly approved assets."""
     model_version = os.getenv("FACE_MODEL_VERSION", "arcface_v1")
     arcface_path = Path(os.getenv("ARCFACE_MODEL_PATH", "models/arcface.onnx"))
     scrfd_path = Path(os.getenv("SCRFD_MODEL_PATH", "models/scrfd.onnx"))
+
+    liveness_path = os.getenv("LIVENESS_MODEL_PATH", "").strip()
+    if not liveness_path:
+        raise RuntimeError("LIVENESS_MODEL_PATH is required for fail-closed recognition runtime")
 
     registry = ModelRegistry({
         model_version: ModelSpec(
@@ -45,10 +45,7 @@ def build_recognition_pipeline() -> RecognitionPipeline:
     })
     spec = registry.validate(model_version)
 
-    registry.validate_detector_artifact(
-        scrfd_path,
-        _required_env("SCRFD_MODEL_SHA256"),
-    )
+    registry.validate_detector_artifact(scrfd_path, _required_env("SCRFD_MODEL_SHA256"))
     _required_env("SCRFD_MODEL_PUBLISHER")
     _required_env("SCRFD_MODEL_REVISION")
     _required_env("SCRFD_MODEL_WEIGHT_LICENSE")
@@ -71,18 +68,15 @@ def build_recognition_pipeline() -> RecognitionPipeline:
     if recognizer.embedding_dim != spec.embedding_dim:
         raise RuntimeError("Recognition model embedding contract mismatch")
 
-    liveness = None
-    liveness_path = os.getenv("LIVENESS_MODEL_PATH", "").strip()
-    if liveness_path:
-        path = Path(liveness_path)
-        if not path.is_file():
-            raise FileNotFoundError(f"Liveness model asset not found: {path}")
-        liveness = AntiSpoofDetector(
-            model_path=path,
-            threshold=float(os.getenv("LIVENESS_THRESHOLD", "0.85")),
-            strict_mode=True,
-            min_face_size=int(os.getenv("LIVENESS_MIN_FACE_SIZE", "60")),
-        )
+    path = Path(liveness_path)
+    if not path.is_file():
+        raise FileNotFoundError("Liveness model asset not found")
+    liveness = AntiSpoofDetector(
+        model_path=path,
+        threshold=float(os.getenv("LIVENESS_THRESHOLD", "0.85")),
+        strict_mode=True,
+        min_face_size=int(os.getenv("LIVENESS_MIN_FACE_SIZE", "60")),
+    )
 
     return RecognitionPipeline(
         detector=detector,
