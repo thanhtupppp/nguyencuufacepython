@@ -1,0 +1,1 @@
+"""Application health/readiness contracts."""
