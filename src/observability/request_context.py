@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import logging
 import re
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from datetime import datetime, timezone
 from uuid import uuid4
 
-_REQUEST_ID = ContextVar("request_id", default=None)
+_REQUEST_ID: ContextVar[str | None] = ContextVar("request_id", default=None)
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
 
@@ -19,10 +19,14 @@ def new_request_id(candidate: str | None = None) -> str:
     return uuid4().hex
 
 
-def set_request_id(request_id: str) -> None:
+def set_request_id(request_id: str) -> Token[str | None]:
     if not _REQUEST_ID_RE.fullmatch(request_id):
         raise ValueError("invalid request id")
-    _REQUEST_ID.set(request_id)
+    return _REQUEST_ID.set(request_id)
+
+
+def reset_request_id(token: Token[str | None]) -> None:
+    _REQUEST_ID.reset(token)
 
 
 def get_request_id() -> str:
