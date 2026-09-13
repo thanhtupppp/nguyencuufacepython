@@ -11,7 +11,8 @@ def _make(tmp_path: Path, rows):
     root = tmp_path / "images"
     root.mkdir()
     for i, row in enumerate(rows):
-        p = root / row["path"]
+        safe_name = Path(str(row["path"]).replace("\\", "/")).name
+        p = root / safe_name
         p.parent.mkdir(parents=True, exist_ok=True)
         data = f"image-{i}".encode()
         p.write_bytes(data)

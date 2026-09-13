@@ -1,7 +1,4 @@
-"""P1.2 minimal trusted-event contract primitives.
-
-Transport adapters must call these helpers only after biometric gates pass.
-"""
+"""Canonical trusted recognition-event contract primitives."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -24,13 +21,13 @@ EventState = Literal[
 
 class RecognitionEvent(BaseModel):
     event_id: UUID
-    camera_id: str = Field(min_length=1)
-    device_id: str = Field(min_length=1)
-    track_id: str = Field(min_length=1)
+    camera_id: str = Field(min_length=1, max_length=128)
+    device_id: str = Field(min_length=1, max_length=128)
+    track_id: str = Field(min_length=1, max_length=128)
     state: EventState
-    person_id: str | None = None
-    model_version: str | None = None
-    embedding_version: str | None = None
+    person_id: str | None = Field(default=None, max_length=128)
+    model_version: str | None = Field(default=None, max_length=128)
+    embedding_version: str | None = Field(default=None, max_length=128)
     quality: float | None = Field(default=None, ge=0.0, le=1.0)
     liveness: float | None = Field(default=None, ge=0.0, le=1.0)
     similarity: float | None = Field(default=None, ge=-1.0, le=1.0)

@@ -19,15 +19,35 @@ def _required_env(name: str) -> str:
     return value
 
 
-def build_recognition_pipeline() -> RecognitionPipeline:
-    """Create the production pipeline only from explicitly approved assets.
+def _validate_liveness_contract(path: Path) -> None:
+    expected = _required_env("LIVENESS_MODEL_SHA256")
+    actual = ModelRegistry.fingerprint(path)
+    if actual.lower() != expected.lower():
+        raise ValueError("Liveness model provenance fingerprint mismatch")
+    if _required_env("LIVENESS_MODEL_PUBLISHER").strip() == "":
+        raise ValueError("Liveness model publisher is required")
+    if _required_env("LIVENESS_MODEL_REVISION").strip() == "":
+        raise ValueError("Liveness model revision is required")
+    license_name = _required_env("LIVENESS_MODEL_WEIGHT_LICENSE")
+    if not license_name.strip():
+        raise ValueError("Liveness model license is required")
+    commercial_use = _required_env("LIVENESS_MODEL_COMMERCIAL_USE").lower()
+    if commercial_use not in {"approved", "allowed"}:
+        raise ValueError("LIVENESS_MODEL_COMMERCIAL_USE must be explicitly approved/allowed")
+    _required_env("LIVENESS_MODEL_PROVENANCE_URL")
+    provider = _required_env("LIVENESS_MODEL_PROVIDER").strip()
+    if provider not in {"CPUExecutionProvider", "CUDAExecutionProvider", "DmlExecutionProvider"}:
+        raise ValueError("Unsupported liveness runtime provider")
 
-    Both ArcFace and SCRFD are provenance-gated. Missing SHA/license/provenance
-    metadata, missing files, or fingerprint mismatches prevent initialization.
-    """
+
+def build_recognition_pipeline() -> RecognitionPipeline:
+    """Create production recognition only from explicitly approved assets."""
     model_version = os.getenv("FACE_MODEL_VERSION", "arcface_v1")
     arcface_path = Path(os.getenv("ARCFACE_MODEL_PATH", "models/arcface.onnx"))
     scrfd_path = Path(os.getenv("SCRFD_MODEL_PATH", "models/scrfd.onnx"))
+    liveness_path = os.getenv("LIVENESS_MODEL_PATH", "").strip()
+    if not liveness_path:
+        raise RuntimeError("LIVENESS_MODEL_PATH is required for fail-closed recognition runtime")
 
     registry = ModelRegistry({
         model_version: ModelSpec(
@@ -45,10 +65,7 @@ def build_recognition_pipeline() -> RecognitionPipeline:
     })
     spec = registry.validate(model_version)
 
-    registry.validate_detector_artifact(
-        scrfd_path,
-        _required_env("SCRFD_MODEL_SHA256"),
-    )
+    registry.validate_detector_artifact(scrfd_path, _required_env("SCRFD_MODEL_SHA256"))
     _required_env("SCRFD_MODEL_PUBLISHER")
     _required_env("SCRFD_MODEL_REVISION")
     _required_env("SCRFD_MODEL_WEIGHT_LICENSE")
@@ -63,26 +80,26 @@ def build_recognition_pipeline() -> RecognitionPipeline:
         nms_threshold=float(os.getenv("SCRFD_NMS_THRESHOLD", "0.4")),
         input_size=(640, 640),
     )
-    recognizer = ArcFaceRecognizer(
-        model_path=spec.model_path,
-        model_name=spec.model_id,
-        model_version=spec.model_version,
-    )
+    recognizer = ArcFaceRecognizer(model_path=spec.model_path, model_name=spec.model_id, model_version=spec.model_version)
     if recognizer.embedding_dim != spec.embedding_dim:
         raise RuntimeError("Recognition model embedding contract mismatch")
 
-    liveness = None
-    liveness_path = os.getenv("LIVENESS_MODEL_PATH", "").strip()
-    if liveness_path:
-        path = Path(liveness_path)
-        if not path.is_file():
-            raise FileNotFoundError(f"Liveness model asset not found: {path}")
-        liveness = AntiSpoofDetector(
-            model_path=path,
-            threshold=float(os.getenv("LIVENESS_THRESHOLD", "0.85")),
-            strict_mode=True,
-            min_face_size=int(os.getenv("LIVENESS_MIN_FACE_SIZE", "60")),
-        )
+    path = Path(liveness_path)
+    if not path.is_file():
+        raise FileNotFoundError("Liveness model asset not found")
+    _validate_liveness_contract(path)
+    liveness = AntiSpoofDetector(
+        model_path=path,
+        threshold=float(os.getenv("LIVENESS_THRESHOLD", "0.85")),
+        strict_mode=True,
+        min_face_size=int(os.getenv("LIVENESS_MIN_FACE_SIZE", "60")),
+        providers=[_required_env("LIVENESS_MODEL_PROVIDER")],
+    )
+    if liveness.session is None:
+        raise RuntimeError("Liveness runtime provider unavailable")
+    input_shape = getattr(liveness, "input_shape", None)
+    if input_shape is None:
+        raise RuntimeError("Liveness model input contract unavailable")
 
     return RecognitionPipeline(
         detector=detector,
