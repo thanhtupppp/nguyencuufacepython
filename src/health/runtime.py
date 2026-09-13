@@ -12,7 +12,7 @@ REQUIRED_DEPENDENCIES = ("database", "model_registry", "mqtt", "recognition")
 
 @dataclass
 class RuntimeLifecycle:
-    """Owns dependency readiness and cleanup callbacks without import-time IO."""
+    """Own dependency readiness and deterministic cleanup callbacks."""
 
     gate: ReadinessGate = field(default_factory=lambda: ReadinessGate(REQUIRED_DEPENDENCIES))
     _cleanup: list[Callable[[], None]] = field(default_factory=list)
@@ -41,7 +41,6 @@ class RuntimeLifecycle:
             try:
                 callback()
             except Exception:
-                # Shutdown is best-effort; never expose cleanup internals to clients.
                 continue
         self.started = False
         for name in REQUIRED_DEPENDENCIES:
