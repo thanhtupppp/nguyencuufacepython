@@ -2,7 +2,7 @@
 
 ## Environment
 
-Required production configuration must include `DATABASE_URL` and the full model provenance set used by `src/api/recognition_runtime.py`: `ARCFACE_MODEL_SHA256`, `ARCFACE_MODEL_PUBLISHER`, `ARCFACE_MODEL_REVISION`, `ARCFACE_MODEL_WEIGHT_LICENSE`, `ARCFACE_MODEL_COMMERCIAL_USE`, `ARCFACE_MODEL_PROVENANCE_URL`, and the corresponding SCRFD provenance variables. MQTT credentials/certificates must be supplied through the deployment environment when TLS/authentication is enabled.
+Required production configuration must include `DATABASE_URL` and the full model provenance set used by `src/api/recognition_runtime.py`: `ARCFACE_MODEL_SHA256`, `ARCFACE_MODEL_PUBLISHER`, `ARCFACE_MODEL_REVISION`, `ARCFACE_MODEL_WEIGHT_LICENSE`, `ARCFACE_MODEL_COMMERCIAL_USE`, `ARCFACE_MODEL_PROVENANCE_URL`, and the corresponding SCRFD provenance variables. `LIVENESS_MODEL_PATH` is also required for fail-closed recognition. MQTT credentials/certificates must be supplied through deployment environment when TLS/authentication is enabled.
 
 ## Symptoms and actions
 
